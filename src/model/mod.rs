@@ -5,25 +5,20 @@ use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{RwLock, RwLockReadGuard};
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct OrderBook {
-    pub bids: Vec<PricePair>,
-    pub asks: Vec<PricePair>,
-}
+pub use order_book::OrderBook;
 
-impl OrderBook {
-    pub fn new() -> Self {
-        Self {
-            bids: Vec::new(),
-            asks: Vec::new(),
-        }
-    }
-}
+mod order_book;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PricePair {
-    pub quantity: Decimal,
     pub price: Decimal,
+    pub quantity: Decimal,
+}
+
+impl PricePair {
+    pub fn new(price: Decimal, quantity: Decimal) -> Self {
+        Self { price, quantity }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
