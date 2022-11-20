@@ -1,4 +1,8 @@
 use std::error::Error;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+use crate::model::OrderBook;
 
 mod api;
 mod matcher;
@@ -11,10 +15,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         .build()?;
 
     let (tx, rx) = tokio::sync::mpsc::channel(32);
+    let order_book = Arc::new(RwLock::new(OrderBook::new()));
 
-    let handle = rt.spawn(api::api(tx));
+    let context = model::AppContext::new(tx, order_book.clone());
+    let handle = rt.spawn(api::api(context));
 
-    matcher::matcher(&rt, rx);
+    matcher::matcher(&rt, rx, order_book);
     rt.block_on(handle)?;
 
     Ok(())

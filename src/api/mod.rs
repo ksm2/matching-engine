@@ -1,5 +1,6 @@
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use std::ops::Deref;
 
 use hyper::header::CONTENT_TYPE;
 use hyper::http::HeaderValue;
@@ -7,25 +8,11 @@ use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use serde::Serialize;
-use tokio::sync::mpsc::Sender;
 
-use crate::model::OpenOrder;
+use crate::model::AppContext;
 
-#[derive(Debug, Clone)]
-struct AppContext {
-    tx: Sender<OpenOrder>,
-}
-
-impl AppContext {
-    pub(crate) fn new(tx: Sender<OpenOrder>) -> Self {
-        Self { tx }
-    }
-}
-
-pub async fn api(tx: Sender<OpenOrder>) {
+pub async fn api(context: AppContext) {
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-
-    let context = AppContext::new(tx);
 
     let make_service = make_service_fn(move |conn: &AddrStream| {
         // We have to clone the context to share it with each invocation of
@@ -52,18 +39,25 @@ pub async fn api(tx: Sender<OpenOrder>) {
 }
 
 async fn handle(context: AppContext, req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    println!("{} {}", req.method(), req.uri());
+    println!("{} {}", req.method(), req.uri().path());
     match (req.method(), req.uri().path()) {
+        (&Method::GET, "/") => handle_get_order_book(context).await,
         (&Method::POST, "/orders") => handle_open_order(context, req.into_body()).await,
         _ => not_found(),
     }
+}
+
+async fn handle_get_order_book(context: AppContext) -> Result<Response<Body>, Infallible> {
+    let order_book = context.read_order_book().await;
+    let res = json_response(&order_book.deref());
+    Ok(res)
 }
 
 async fn handle_open_order(context: AppContext, req: Body) -> Result<Response<Body>, Infallible> {
     let str = hyper::body::to_bytes(req).await.unwrap();
     let order = serde_json::from_slice(&str).unwrap();
     let res = json_response(&order);
-    context.tx.send(order).await.unwrap();
+    context.open_order(order).await.unwrap();
     Ok(res)
 }
 
