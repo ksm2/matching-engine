@@ -1,12 +1,15 @@
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::ops::Neg;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{RwLock, RwLockReadGuard};
 
+pub use order::{Order, OrderStatus};
 pub use order_book::OrderBook;
 
+mod order;
 mod order_book;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -28,10 +31,21 @@ pub struct OpenOrder {
     pub side: Side,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Side {
     Buy,
     Sell,
+}
+
+impl Neg for Side {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Side::Buy => Side::Sell,
+            Side::Sell => Side::Buy,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

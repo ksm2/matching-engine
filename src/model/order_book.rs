@@ -1,6 +1,8 @@
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 
-use crate::model::{PricePair, Side};
+use crate::model::PricePair;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrderBook {
@@ -16,39 +18,64 @@ impl OrderBook {
         }
     }
 
-    pub fn bid_or_ask(&mut self, side: Side, pair: PricePair) {
-        match side {
-            Side::Buy => self.bid(pair),
-            Side::Sell => self.ask(pair),
+    pub fn place_bid(&mut self, bid_price: Decimal, bid_qty: Decimal) {
+        for (index, existing_bid) in self.bids.iter_mut().enumerate() {
+            match existing_bid.price.cmp(&bid_price) {
+                Ordering::Equal => {
+                    existing_bid.quantity += bid_qty;
+                    return;
+                }
+                Ordering::Less => {
+                    self.bids.insert(index, PricePair::new(bid_price, bid_qty));
+                    return;
+                }
+                Ordering::Greater => {}
+            };
         }
+        // The price is lower than all other bids
+        self.bids.push(PricePair::new(bid_price, bid_qty));
     }
 
-    pub fn bid(&mut self, new_bid: PricePair) {
+    pub fn take_bid(&mut self, bid_price: Decimal, bid_qty: Decimal) {
         for (index, existing_bid) in self.bids.iter_mut().enumerate() {
-            if existing_bid.price == new_bid.price {
-                existing_bid.quantity += new_bid.quantity;
-                return;
-            } else if existing_bid.price < new_bid.price {
-                self.bids.insert(index, new_bid);
+            if existing_bid.price == bid_price {
+                existing_bid.quantity -= bid_qty;
+                if existing_bid.quantity.is_zero() {
+                    self.bids.remove(index);
+                }
                 return;
             }
         }
-        // The price is lower than all other bids
-        self.bids.push(new_bid);
     }
 
-    pub fn ask(&mut self, new_ask: PricePair) {
+    pub fn place_ask(&mut self, ask_price: Decimal, ask_qty: Decimal) {
         for (index, existing_ask) in self.asks.iter_mut().enumerate() {
-            if existing_ask.price == new_ask.price {
-                existing_ask.quantity += new_ask.quantity;
-                return;
-            } else if existing_ask.price > new_ask.price {
-                self.asks.insert(index, new_ask);
-                return;
+            match existing_ask.price.cmp(&ask_price) {
+                Ordering::Equal => {
+                    existing_ask.quantity += ask_qty;
+                    return;
+                }
+                Ordering::Greater => {
+                    self.asks.insert(index, PricePair::new(ask_price, ask_qty));
+                    return;
+                }
+                Ordering::Less => {}
             }
         }
         // The price is higher than all other asks
-        self.asks.push(new_ask);
+        self.asks.push(PricePair::new(ask_price, ask_qty));
+    }
+
+    pub fn take_ask(&mut self, ask_price: Decimal, ask_qty: Decimal) {
+        for (index, existing_ask) in self.asks.iter_mut().enumerate() {
+            if existing_ask.price == ask_price {
+                existing_ask.quantity -= ask_qty;
+                if existing_ask.quantity.is_zero() {
+                    self.asks.remove(index);
+                }
+                return;
+            }
+        }
     }
 }
 
@@ -67,10 +94,10 @@ mod tests {
     #[test]
     fn should_bid_a_new_price() {
         let mut o = OrderBook::new();
-        o.bid(PricePair::new(dec!(11), dec!(200)));
+        o.place_bid(dec!(11), dec!(200));
         assert_eq!(o.bids, vec![PricePair::new(dec!(11), dec!(200))]);
 
-        o.bid(PricePair::new(dec!(10), dec!(300)));
+        o.place_bid(dec!(10), dec!(300));
         assert_eq!(
             o.bids,
             vec![
@@ -79,7 +106,7 @@ mod tests {
             ]
         );
 
-        o.bid(PricePair::new(dec!(12), dec!(500)));
+        o.place_bid(dec!(12), dec!(500));
         assert_eq!(
             o.bids,
             vec![
@@ -89,12 +116,31 @@ mod tests {
             ]
         );
 
-        o.bid(PricePair::new(dec!(11), dec!(500)));
+        o.place_bid(dec!(11), dec!(500));
         assert_eq!(
             o.bids,
             vec![
                 PricePair::new(dec!(12), dec!(500)),
                 PricePair::new(dec!(11), dec!(700)),
+                PricePair::new(dec!(10), dec!(300)),
+            ]
+        );
+
+        o.take_bid(dec!(11), dec!(300));
+        assert_eq!(
+            o.bids,
+            vec![
+                PricePair::new(dec!(12), dec!(500)),
+                PricePair::new(dec!(11), dec!(400)),
+                PricePair::new(dec!(10), dec!(300)),
+            ]
+        );
+
+        o.take_bid(dec!(11), dec!(400));
+        assert_eq!(
+            o.bids,
+            vec![
+                PricePair::new(dec!(12), dec!(500)),
                 PricePair::new(dec!(10), dec!(300)),
             ]
         );
@@ -103,10 +149,10 @@ mod tests {
     #[test]
     fn should_ask_a_new_price() {
         let mut o = OrderBook::new();
-        o.ask(PricePair::new(dec!(11), dec!(200)));
+        o.place_ask(dec!(11), dec!(200));
         assert_eq!(o.asks, vec![PricePair::new(dec!(11), dec!(200))]);
 
-        o.ask(PricePair::new(dec!(10), dec!(300)));
+        o.place_ask(dec!(10), dec!(300));
         assert_eq!(
             o.asks,
             vec![
@@ -115,7 +161,7 @@ mod tests {
             ]
         );
 
-        o.ask(PricePair::new(dec!(12), dec!(500)));
+        o.place_ask(dec!(12), dec!(500));
         assert_eq!(
             o.asks,
             vec![
@@ -125,12 +171,31 @@ mod tests {
             ]
         );
 
-        o.ask(PricePair::new(dec!(11), dec!(500)));
+        o.place_ask(dec!(11), dec!(500));
         assert_eq!(
             o.asks,
             vec![
                 PricePair::new(dec!(10), dec!(300)),
                 PricePair::new(dec!(11), dec!(700)),
+                PricePair::new(dec!(12), dec!(500)),
+            ]
+        );
+
+        o.take_ask(dec!(11), dec!(300));
+        assert_eq!(
+            o.asks,
+            vec![
+                PricePair::new(dec!(10), dec!(300)),
+                PricePair::new(dec!(11), dec!(400)),
+                PricePair::new(dec!(12), dec!(500)),
+            ]
+        );
+
+        o.take_ask(dec!(11), dec!(400));
+        assert_eq!(
+            o.asks,
+            vec![
+                PricePair::new(dec!(10), dec!(300)),
                 PricePair::new(dec!(12), dec!(500)),
             ]
         );
