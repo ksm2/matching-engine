@@ -7,7 +7,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot::{Receiver, Sender as OneShotSender};
 use tokio::sync::{RwLock, RwLockReadGuard};
 
-pub use order::{Order, OrderStatus};
+pub use order::{Order, OrderId, OrderStatus};
 pub use order_book::{OrderBook, PricePair};
 
 mod order;

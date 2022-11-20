@@ -1,4 +1,4 @@
-use crate::model::Side;
+use crate::model::{OrderId, Side};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -10,7 +10,7 @@ pub struct OrderBook {
     pub best_ask: Option<Decimal>,
     pub bids: Vec<PricePair>,
     pub asks: Vec<PricePair>,
-    pub trades: Vec<PricePair>,
+    pub trades: Vec<Trade>,
 }
 
 impl OrderBook {
@@ -125,10 +125,52 @@ impl OrderBook {
         }
     }
 
-    pub fn trade(&mut self, price: Decimal, quantity: Decimal) {
-        let trade = PricePair::new(price, quantity);
+    pub fn trade(
+        &mut self,
+        price: Decimal,
+        quantity: Decimal,
+        buy_order_id: OrderId,
+        sell_order_id: OrderId,
+    ) {
+        let trade = Trade::new(price, quantity, buy_order_id, sell_order_id);
         self.trades.push(trade);
         self.last = Some(price);
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PricePair {
+    pub price: Decimal,
+    pub quantity: Decimal,
+}
+
+impl PricePair {
+    pub fn new(price: Decimal, quantity: Decimal) -> Self {
+        Self { price, quantity }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Trade {
+    pub price: Decimal,
+    pub quantity: Decimal,
+    pub buy_order_id: OrderId,
+    pub sell_order_id: OrderId,
+}
+
+impl Trade {
+    pub fn new(
+        price: Decimal,
+        quantity: Decimal,
+        buy_order_id: OrderId,
+        sell_order_id: OrderId,
+    ) -> Self {
+        Self {
+            price,
+            quantity,
+            buy_order_id,
+            sell_order_id,
+        }
     }
 }
 
@@ -290,20 +332,8 @@ mod tests {
         assert_eq!(o.trades, Vec::new());
         assert_eq!(o.last, None);
 
-        o.trade(dec!(15), dec!(500));
-        assert_eq!(o.trades, vec![PricePair::new(dec!(15), dec!(500))]);
+        o.trade(dec!(15), dec!(500), 1, 2);
+        assert_eq!(o.trades, vec![Trade::new(dec!(15), dec!(500), 1, 2)]);
         assert_eq!(o.last, Some(dec!(15)));
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PricePair {
-    pub price: Decimal,
-    pub quantity: Decimal,
-}
-
-impl PricePair {
-    pub fn new(price: Decimal, quantity: Decimal) -> Self {
-        Self { price, quantity }
     }
 }

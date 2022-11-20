@@ -4,18 +4,20 @@ use tokio::sync::mpsc::Receiver;
 use tokio::sync::oneshot::Sender;
 use tokio::sync::RwLock;
 
-use crate::model::{OpenOrder, Order, OrderBook, OrderStatus, Side};
+use crate::model::{OpenOrder, Order, OrderBook, OrderId, OrderStatus, Side};
 
 pub fn matcher(
     rt: &Runtime,
     mut rx: Receiver<(OpenOrder, Sender<Order>)>,
     ob: Arc<RwLock<OrderBook>>,
 ) {
+    let mut id = 0_u64;
     let mut matcher = Matcher::new(rt, ob);
     while let Some((message, sender)) = rt.block_on(rx.recv()) {
+        id += 1;
         println!("Processing {:?}", message);
 
-        let mut order = Order::open(message.side, message.price, message.quantity);
+        let mut order = Order::open(OrderId(id), message.side, message.price, message.quantity);
         matcher.process(&mut order);
         sender.send(order).unwrap();
     }
@@ -52,7 +54,11 @@ impl<'a> Matcher<'a> {
                 let used_qty = other_order.fill(qty);
                 println!("Filled bid at {}", other_order.price);
                 order.fill(used_qty);
-                ob.trade(other_order.price, used_qty);
+                let (buy_order_id, sell_order_id) = match order.side {
+                    Side::Buy => (order.id, other_order.id),
+                    Side::Sell => (other_order.id, order.id),
+                };
+                ob.trade(other_order.price, used_qty, buy_order_id, sell_order_id);
 
                 println!("Taking ask of {} at {}", used_qty, other_order.price);
                 ob.take(!order.side, other_order.price, used_qty);
