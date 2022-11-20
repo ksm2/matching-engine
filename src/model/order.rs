@@ -38,6 +38,10 @@ impl Order {
         }
     }
 
+    pub fn unfilled(&self) -> Decimal {
+        self.quantity - self.filled
+    }
+
     pub fn crosses(&self, other: &Self) -> bool {
         if self.side == other.side {
             return false;
@@ -62,6 +66,10 @@ impl Order {
         }
 
         used
+    }
+
+    pub fn is_filled(&self) -> bool {
+        self.status == OrderStatus::Filled
     }
 }
 
