@@ -1,16 +1,17 @@
 use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
 use crate::model::Side;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrderStatus {
     Open,
     PartiallyFilled,
     Filled,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Order {
     pub side: Side,
     pub status: OrderStatus,

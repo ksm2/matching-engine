@@ -56,8 +56,9 @@ async fn handle_get_order_book(context: AppContext) -> Result<Response<Body>, In
 async fn handle_open_order(context: AppContext, req: Body) -> Result<Response<Body>, Infallible> {
     let str = hyper::body::to_bytes(req).await.unwrap();
     let order = serde_json::from_slice(&str).unwrap();
+    let rx = context.open_order(order).await.unwrap();
+    let order = rx.await.unwrap();
     let res = json_response(&order);
-    context.open_order(order).await.unwrap();
     Ok(res)
 }
 

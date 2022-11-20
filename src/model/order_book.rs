@@ -1,8 +1,7 @@
+use crate::model::Side;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-
-use crate::model::PricePair;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrderBook {
@@ -15,6 +14,13 @@ impl OrderBook {
         Self {
             bids: Vec::new(),
             asks: Vec::new(),
+        }
+    }
+
+    pub fn place(&mut self, side: Side, price: Decimal, qty: Decimal) {
+        match side {
+            Side::Buy => self.place_bid(price, qty),
+            Side::Sell => self.place_ask(price, qty),
         }
     }
 
@@ -36,18 +42,6 @@ impl OrderBook {
         self.bids.push(PricePair::new(bid_price, bid_qty));
     }
 
-    pub fn take_bid(&mut self, bid_price: Decimal, bid_qty: Decimal) {
-        for (index, existing_bid) in self.bids.iter_mut().enumerate() {
-            if existing_bid.price == bid_price {
-                existing_bid.quantity -= bid_qty;
-                if existing_bid.quantity.is_zero() {
-                    self.bids.remove(index);
-                }
-                return;
-            }
-        }
-    }
-
     pub fn place_ask(&mut self, ask_price: Decimal, ask_qty: Decimal) {
         for (index, existing_ask) in self.asks.iter_mut().enumerate() {
             match existing_ask.price.cmp(&ask_price) {
@@ -64,6 +58,25 @@ impl OrderBook {
         }
         // The price is higher than all other asks
         self.asks.push(PricePair::new(ask_price, ask_qty));
+    }
+
+    pub fn take(&mut self, side: Side, price: Decimal, qty: Decimal) {
+        match side {
+            Side::Buy => self.take_bid(price, qty),
+            Side::Sell => self.take_ask(price, qty),
+        }
+    }
+
+    pub fn take_bid(&mut self, bid_price: Decimal, bid_qty: Decimal) {
+        for (index, existing_bid) in self.bids.iter_mut().enumerate() {
+            if existing_bid.price == bid_price {
+                existing_bid.quantity -= bid_qty;
+                if existing_bid.quantity.is_zero() {
+                    self.bids.remove(index);
+                }
+                return;
+            }
+        }
     }
 
     pub fn take_ask(&mut self, ask_price: Decimal, ask_qty: Decimal) {
@@ -199,5 +212,17 @@ mod tests {
                 PricePair::new(dec!(12), dec!(500)),
             ]
         );
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PricePair {
+    pub price: Decimal,
+    pub quantity: Decimal,
+}
+
+impl PricePair {
+    pub fn new(price: Decimal, quantity: Decimal) -> Self {
+        Self { price, quantity }
     }
 }
