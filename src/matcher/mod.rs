@@ -52,6 +52,8 @@ impl<'a> Matcher<'a> {
                 let used_qty = other_order.fill(qty);
                 println!("Filled bid at {}", other_order.price);
                 order.fill(used_qty);
+                ob.trade(other_order.price, used_qty);
+
                 println!("Taking ask of {} at {}", used_qty, other_order.price);
                 ob.take(!order.side, other_order.price, used_qty);
 

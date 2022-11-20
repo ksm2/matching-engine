@@ -5,15 +5,19 @@ use std::cmp::Ordering;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrderBook {
+    pub last: Option<Decimal>,
     pub bids: Vec<PricePair>,
     pub asks: Vec<PricePair>,
+    pub trades: Vec<PricePair>,
 }
 
 impl OrderBook {
     pub fn new() -> Self {
         Self {
+            last: None,
             bids: Vec::new(),
             asks: Vec::new(),
+            trades: Vec::new(),
         }
     }
 
@@ -89,6 +93,12 @@ impl OrderBook {
                 return;
             }
         }
+    }
+
+    pub fn trade(&mut self, price: Decimal, quantity: Decimal) {
+        let trade = PricePair::new(price, quantity);
+        self.trades.push(trade);
+        self.last = Some(price);
     }
 }
 
@@ -212,6 +222,17 @@ mod tests {
                 PricePair::new(dec!(12), dec!(500)),
             ]
         );
+    }
+
+    #[test]
+    fn should_handle_a_trade() {
+        let mut o = OrderBook::new();
+        assert_eq!(o.trades, Vec::new());
+        assert_eq!(o.last, None);
+
+        o.trade(dec!(15), dec!(500));
+        assert_eq!(o.trades, vec![PricePair::new(dec!(15), dec!(500))]);
+        assert_eq!(o.last, Some(dec!(15)));
     }
 }
 
