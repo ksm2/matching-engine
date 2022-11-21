@@ -1,5 +1,4 @@
 use std::convert::Infallible;
-use std::net::SocketAddr;
 use std::ops::Deref;
 
 use hyper::header::CONTENT_TYPE;
@@ -10,10 +9,14 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use log::{debug, error, info};
 use serde::Serialize;
 
+use crate::config::Config;
 use crate::model::ApiContext;
 
-pub async fn api(context: ApiContext) {
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+pub async fn api(config: Config, context: ApiContext) {
+    let Ok(addr) = config.host.parse() else {
+        error!("Could not parse APP_HOST: {}", config.host);
+        return;
+    };
 
     let make_service = make_service_fn(move |conn: &AddrStream| {
         // We have to clone the context to share it with each invocation of
