@@ -9,6 +9,9 @@ mod matcher;
 mod model;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // Read environment variables from .env
+    dotenv::dotenv().ok();
+
     // Initialize logger from environment
     env_logger::init();
 
