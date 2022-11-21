@@ -5,13 +5,9 @@ use tokio::sync::mpsc::Receiver;
 use tokio::sync::oneshot::Sender;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
-use crate::model::{OpenOrder, Order, OrderBook, OrderId, Side};
+use crate::model::{OpenOrder, Order, OrderId, Side, State, Trade};
 
-pub fn matcher(
-    rt: &Runtime,
-    mut rx: Receiver<(OpenOrder, Sender<Order>)>,
-    ob: Arc<RwLock<OrderBook>>,
-) {
+pub fn matcher(rt: &Runtime, mut rx: Receiver<(OpenOrder, Sender<Order>)>, ob: Arc<RwLock<State>>) {
     let mut id = 0_u64;
     let mut matcher = Matcher::new(rt, ob);
     while let Some((message, sender)) = rt.block_on(rx.recv()) {
@@ -28,23 +24,23 @@ pub fn matcher(
 #[derive(Debug)]
 struct Matcher<'a> {
     rt: &'a Runtime,
-    ob: Arc<RwLock<OrderBook>>,
+    state: Arc<RwLock<State>>,
     bids: Vec<Order>,
     asks: Vec<Order>,
 }
 
 impl<'a> Matcher<'a> {
-    pub fn new(rt: &'a Runtime, ob: Arc<RwLock<OrderBook>>) -> Self {
+    pub fn new(rt: &'a Runtime, state: Arc<RwLock<State>>) -> Self {
         Self {
             rt,
-            ob,
+            state,
             bids: Vec::new(),
             asks: Vec::new(),
         }
     }
 
     pub fn process(&mut self, order: &mut Order) {
-        let mut ob = self.rt.block_on(self.ob.write());
+        let mut state = self.rt.block_on(self.state.write());
 
         let opposite_orders = match order.side {
             Side::Buy => &mut self.asks,
@@ -56,7 +52,7 @@ impl<'a> Matcher<'a> {
                 continue;
             }
 
-            Matcher::execute_trade(&mut ob, order, other_order);
+            Matcher::execute_trade(&mut state, order, other_order);
             if order.is_filled() {
                 return;
             }
@@ -64,13 +60,15 @@ impl<'a> Matcher<'a> {
 
         if !order.is_filled() {
             debug!("Placing order of {} at {}", order.unfilled(), order.price);
-            ob.place(order.side, order.price, order.unfilled());
-            drop(ob);
+            state
+                .order_book
+                .place(order.side, order.price, order.unfilled());
+            drop(state);
             self.push_order(order.clone());
         }
     }
 
-    fn execute_trade(ob: &mut RwLockWriteGuard<OrderBook>, order: &mut Order, other: &mut Order) {
+    fn execute_trade(state: &mut RwLockWriteGuard<State>, order: &mut Order, other: &mut Order) {
         let (buy_order_id, sell_order_id) = match order.side {
             Side::Buy => (order.id, other.id),
             Side::Sell => (other.id, order.id),
@@ -80,9 +78,10 @@ impl<'a> Matcher<'a> {
         order.fill(used_qty);
         debug!("Filled bid at {}", other.price);
 
-        ob.trade(other.price, used_qty, buy_order_id, sell_order_id);
+        let trade = Trade::new(other.price, other.quantity, buy_order_id, sell_order_id);
+        state.push_trade(trade);
 
-        ob.take(!order.side, other.price, used_qty);
+        state.order_book.take(!order.side, other.price, used_qty);
         debug!("Taking ask of {} at {}", used_qty, other.price);
     }
 

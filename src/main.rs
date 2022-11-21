@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::config::Config;
-use crate::model::{ApiContext, OrderBook};
+use crate::model::{ApiContext, State};
 
 mod api;
 mod config;
@@ -35,14 +35,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     info!("Starting {} API threads", config.api_threads);
 
     let (tx, rx) = tokio::sync::mpsc::channel(32);
-    let order_book = Arc::new(RwLock::new(OrderBook::new()));
+    let state = Arc::new(RwLock::new(State::new()));
 
     // Spawn async API threads
-    let context = ApiContext::new(tx, order_book.clone());
+    let context = ApiContext::new(tx, state.clone());
     let handle = rt.spawn(api::api(config, context));
 
     // Run the matcher
-    matcher::matcher(&rt, rx, order_book);
+    matcher::matcher(&rt, rx, state);
     rt.block_on(handle)?;
 
     Ok(())

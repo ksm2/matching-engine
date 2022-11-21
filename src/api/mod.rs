@@ -46,6 +46,7 @@ async fn handle(context: ApiContext, req: Request<Body>) -> Result<Response<Body
     debug!("{} {}", req.method(), req.uri().path());
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => handle_get_order_book(context).await,
+        (&Method::GET, "/trades") => handle_get_trades(context).await,
         (&Method::POST, "/orders") => handle_open_order(context, req.into_body()).await,
         _ => not_found(),
     }
@@ -54,6 +55,12 @@ async fn handle(context: ApiContext, req: Request<Body>) -> Result<Response<Body
 async fn handle_get_order_book(context: ApiContext) -> Result<Response<Body>, Infallible> {
     let order_book = context.read_order_book().await;
     let res = json_response(StatusCode::OK, &order_book.deref());
+    Ok(res)
+}
+
+async fn handle_get_trades(context: ApiContext) -> Result<Response<Body>, Infallible> {
+    let trades = context.read_trades().await;
+    let res = json_response(StatusCode::OK, &trades.deref());
     Ok(res)
 }
 

@@ -4,24 +4,27 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot::{Receiver, Sender as OneShotSender};
 use tokio::sync::{RwLock, RwLockReadGuard};
 
-use super::{OpenOrder, Order, OrderBook};
+use super::{OpenOrder, Order, OrderBook, State, Trade};
 
 #[derive(Debug, Clone)]
 pub struct ApiContext {
     tx: Sender<(OpenOrder, OneShotSender<Order>)>,
-    order_book: Arc<RwLock<OrderBook>>,
+    state: Arc<RwLock<State>>,
 }
 
 impl ApiContext {
-    pub fn new(
-        tx: Sender<(OpenOrder, OneShotSender<Order>)>,
-        order_book: Arc<RwLock<OrderBook>>,
-    ) -> Self {
-        Self { tx, order_book }
+    pub fn new(tx: Sender<(OpenOrder, OneShotSender<Order>)>, state: Arc<RwLock<State>>) -> Self {
+        Self { tx, state }
     }
 
     pub async fn read_order_book(&self) -> RwLockReadGuard<OrderBook> {
-        self.order_book.read().await
+        let state = self.state.read().await;
+        RwLockReadGuard::map(state, |s| &s.order_book)
+    }
+
+    pub async fn read_trades(&self) -> RwLockReadGuard<Vec<Trade>> {
+        let state = self.state.read().await;
+        RwLockReadGuard::map(state, |s| &s.trades)
     }
 
     pub async fn open_order(

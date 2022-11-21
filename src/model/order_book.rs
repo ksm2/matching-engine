@@ -1,9 +1,8 @@
-use crate::model::side::Side;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
-use super::OrderId;
+use super::Side;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrderBook {
@@ -12,7 +11,6 @@ pub struct OrderBook {
     pub best_ask: Option<Decimal>,
     pub bids: Vec<PricePair>,
     pub asks: Vec<PricePair>,
-    pub trades: Vec<Trade>,
 }
 
 impl OrderBook {
@@ -23,7 +21,6 @@ impl OrderBook {
             best_ask: None,
             bids: Vec::new(),
             asks: Vec::new(),
-            trades: Vec::new(),
         }
     }
 
@@ -127,15 +124,7 @@ impl OrderBook {
         }
     }
 
-    pub fn trade(
-        &mut self,
-        price: Decimal,
-        quantity: Decimal,
-        buy_order_id: OrderId,
-        sell_order_id: OrderId,
-    ) {
-        let trade = Trade::new(price, quantity, buy_order_id, sell_order_id);
-        self.trades.push(trade);
+    pub fn last(&mut self, price: Decimal) {
         self.last = Some(price);
     }
 }
@@ -149,30 +138,6 @@ pub struct PricePair {
 impl PricePair {
     pub fn new(price: Decimal, quantity: Decimal) -> Self {
         Self { price, quantity }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Trade {
-    pub price: Decimal,
-    pub quantity: Decimal,
-    pub buy_order_id: OrderId,
-    pub sell_order_id: OrderId,
-}
-
-impl Trade {
-    pub fn new(
-        price: Decimal,
-        quantity: Decimal,
-        buy_order_id: OrderId,
-        sell_order_id: OrderId,
-    ) -> Self {
-        Self {
-            price,
-            quantity,
-            buy_order_id,
-            sell_order_id,
-        }
     }
 }
 
@@ -331,14 +296,9 @@ mod tests {
     #[test]
     fn should_handle_a_trade() {
         let mut o = OrderBook::new();
-        assert_eq!(o.trades, Vec::new());
         assert_eq!(o.last, None);
 
-        o.trade(dec!(15), dec!(500), OrderId(1), OrderId(2));
-        assert_eq!(
-            o.trades,
-            vec![Trade::new(dec!(15), dec!(500), OrderId(1), OrderId(2))]
-        );
+        o.last(dec!(15));
         assert_eq!(o.last, Some(dec!(15)));
     }
 }
