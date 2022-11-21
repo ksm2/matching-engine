@@ -7,6 +7,7 @@ use hyper::http::HeaderValue;
 use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
+use log::{debug, error, info};
 use serde::Serialize;
 
 use crate::model::AppContext;
@@ -22,7 +23,7 @@ pub async fn api(context: AppContext) {
 
         // You can grab the address of the incoming connection like so.
         let addr = conn.remote_addr();
-        println!("Connected {}", addr);
+        debug!("Connected {}", addr);
 
         // Create a `Service` for responding to the request.
         let service = service_fn(move |req| handle(context.clone(), req));
@@ -32,14 +33,14 @@ pub async fn api(context: AppContext) {
     });
 
     let server = Server::bind(&addr).serve(make_service);
-    println!("Server is running on http://{}", addr);
+    info!("Server is running on http://{}", addr);
     if let Err(e) = server.await {
-        eprintln!("server error: {}", e);
+        error!("Server error: {}", e);
     }
 }
 
 async fn handle(context: AppContext, req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    println!("{} {}", req.method(), req.uri().path());
+    debug!("{} {}", req.method(), req.uri().path());
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => handle_get_order_book(context).await,
         (&Method::POST, "/orders") => handle_open_order(context, req.into_body()).await,

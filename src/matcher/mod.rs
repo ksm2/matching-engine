@@ -1,3 +1,4 @@
+use log::debug;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Receiver;
@@ -15,7 +16,7 @@ pub fn matcher(
     let mut matcher = Matcher::new(rt, ob);
     while let Some((message, sender)) = rt.block_on(rx.recv()) {
         id += 1;
-        println!("Processing {:?}", message);
+        debug!("Processing {:?}", message);
 
         let mut order = Order::open(OrderId(id), message.side, message.price, message.quantity);
         matcher.process(&mut order);
@@ -62,7 +63,7 @@ impl<'a> Matcher<'a> {
         }
 
         if !order.is_filled() {
-            println!("Placing order of {} at {}", order.unfilled(), order.price);
+            debug!("Placing order of {} at {}", order.unfilled(), order.price);
             ob.place(order.side, order.price, order.unfilled());
             drop(ob);
             self.push_order(order.clone());
@@ -77,12 +78,12 @@ impl<'a> Matcher<'a> {
 
         let used_qty = other.fill(order.unfilled());
         order.fill(used_qty);
-        println!("Filled bid at {}", other.price);
+        debug!("Filled bid at {}", other.price);
 
         ob.trade(other.price, used_qty, buy_order_id, sell_order_id);
 
         ob.take(!order.side, other.price, used_qty);
-        println!("Taking ask of {} at {}", used_qty, other.price);
+        debug!("Taking ask of {} at {}", used_qty, other.price);
     }
 
     fn push_order(&mut self, order: Order) {

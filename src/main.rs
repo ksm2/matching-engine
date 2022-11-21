@@ -1,3 +1,4 @@
+use model::AppContext;
 use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -9,6 +10,10 @@ mod matcher;
 mod model;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // Initialize logger from environment
+    env_logger::init();
+
+    // Create async runtime
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .worker_threads(10)
@@ -17,9 +22,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let (tx, rx) = tokio::sync::mpsc::channel(32);
     let order_book = Arc::new(RwLock::new(OrderBook::new()));
 
-    let context = model::AppContext::new(tx, order_book.clone());
+    // Spawn async API threads
+    let context = AppContext::new(tx, order_book.clone());
     let handle = rt.spawn(api::api(context));
 
+    // Run the matcher
     matcher::matcher(&rt, rx, order_book);
     rt.block_on(handle)?;
 
