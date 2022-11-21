@@ -10,6 +10,10 @@ This project is a prototype for a matching engine developed in Rust.
   * [Ubuntu](#ubuntu)
 - [Running](#running)
 - [Configuration](#configuration)
+- [Endpoints](#endpoints)
+  * [`GET /`](#get-)
+  * [`GET /trades`](#get-trades)
+  * [`POST /orders`](#post-orders)
 
 
 ## Installing Rust
@@ -57,3 +61,28 @@ To get started, you can use the `.env.dist` file:
     cp .env.dist .env
 
 All available options can be seen in the [Config](./src/config/mod.rs) struct.
+
+
+## Endpoints
+
+These are the available endpoints.
+They all accept and provide data in JSON.
+
+### `GET /`
+
+Returns the current order book.
+
+### `GET /trades`
+
+Returns all made trades.
+
+### `POST /orders`
+
+Opens a new order with the following structure:
+```json
+{
+  "price": 21,
+  "quantity": 250,
+  "side": "Sell"
+}
+```
