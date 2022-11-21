@@ -332,8 +332,8 @@ mod tests {
         assert_eq!(o.trades, Vec::new());
         assert_eq!(o.last, None);
 
-        o.trade(dec!(15), dec!(500), 1, 2);
-        assert_eq!(o.trades, vec![Trade::new(dec!(15), dec!(500), 1, 2)]);
+        o.trade(dec!(15), dec!(500), OrderId(1), OrderId(2));
+        assert_eq!(o.trades, vec![Trade::new(dec!(15), dec!(500), OrderId(1), OrderId(2))]);
         assert_eq!(o.last, Some(dec!(15)));
     }
 }
