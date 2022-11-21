@@ -10,9 +10,9 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use log::{debug, error, info};
 use serde::Serialize;
 
-use crate::model::AppContext;
+use crate::model::ApiContext;
 
-pub async fn api(context: AppContext) {
+pub async fn api(context: ApiContext) {
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
 
     let make_service = make_service_fn(move |conn: &AddrStream| {
@@ -39,7 +39,7 @@ pub async fn api(context: AppContext) {
     }
 }
 
-async fn handle(context: AppContext, req: Request<Body>) -> Result<Response<Body>, Infallible> {
+async fn handle(context: ApiContext, req: Request<Body>) -> Result<Response<Body>, Infallible> {
     debug!("{} {}", req.method(), req.uri().path());
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => handle_get_order_book(context).await,
@@ -48,13 +48,13 @@ async fn handle(context: AppContext, req: Request<Body>) -> Result<Response<Body
     }
 }
 
-async fn handle_get_order_book(context: AppContext) -> Result<Response<Body>, Infallible> {
+async fn handle_get_order_book(context: ApiContext) -> Result<Response<Body>, Infallible> {
     let order_book = context.read_order_book().await;
     let res = json_response(&order_book.deref());
     Ok(res)
 }
 
-async fn handle_open_order(context: AppContext, req: Body) -> Result<Response<Body>, Infallible> {
+async fn handle_open_order(context: ApiContext, req: Body) -> Result<Response<Body>, Infallible> {
     let str = hyper::body::to_bytes(req).await.unwrap();
     let order = serde_json::from_slice(&str).unwrap();
     let rx = context.open_order(order).await.unwrap();

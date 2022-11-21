@@ -1,9 +1,8 @@
-use model::AppContext;
 use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::model::OrderBook;
+use crate::model::{ApiContext, OrderBook};
 
 mod api;
 mod matcher;
@@ -23,7 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let order_book = Arc::new(RwLock::new(OrderBook::new()));
 
     // Spawn async API threads
-    let context = AppContext::new(tx, order_book.clone());
+    let context = ApiContext::new(tx, order_book.clone());
     let handle = rt.spawn(api::api(context));
 
     // Run the matcher

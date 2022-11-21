@@ -1,7 +1,9 @@
-use crate::model::{OrderId, Side};
+use crate::model::side::Side;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+
+use super::OrderId;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrderBook {
@@ -333,7 +335,10 @@ mod tests {
         assert_eq!(o.last, None);
 
         o.trade(dec!(15), dec!(500), OrderId(1), OrderId(2));
-        assert_eq!(o.trades, vec![Trade::new(dec!(15), dec!(500), OrderId(1), OrderId(2))]);
+        assert_eq!(
+            o.trades,
+            vec![Trade::new(dec!(15), dec!(500), OrderId(1), OrderId(2))]
+        );
         assert_eq!(o.last, Some(dec!(15)));
     }
 }
