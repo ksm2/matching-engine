@@ -50,7 +50,7 @@ async fn handle(context: ApiContext, req: Request<Body>) -> Result<Response<Body
 
 async fn handle_get_order_book(context: ApiContext) -> Result<Response<Body>, Infallible> {
     let order_book = context.read_order_book().await;
-    let res = json_response(&order_book.deref());
+    let res = json_response(StatusCode::OK, &order_book.deref());
     Ok(res)
 }
 
@@ -59,13 +59,14 @@ async fn handle_open_order(context: ApiContext, req: Body) -> Result<Response<Bo
     let order = serde_json::from_slice(&str).unwrap();
     let rx = context.open_order(order).await.unwrap();
     let order = rx.await.unwrap();
-    let res = json_response(&order);
+    let res = json_response(StatusCode::CREATED, &order);
     Ok(res)
 }
 
-fn json_response<T: Serialize>(data: &T) -> Response<Body> {
+fn json_response<T: Serialize>(status: StatusCode, data: &T) -> Response<Body> {
     let json = serde_json::to_string(data).unwrap();
     let mut res = Response::new(json.into());
+    *res.status_mut() = status;
     let headers = res.headers_mut();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
