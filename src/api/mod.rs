@@ -8,6 +8,7 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use log::{debug, error, info};
 use serde::Serialize;
+use tokio::time::Instant;
 
 use crate::config::Config;
 use crate::model::ApiContext;
@@ -43,13 +44,23 @@ pub async fn api(config: Config, context: ApiContext) {
 }
 
 async fn handle(context: ApiContext, req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    debug!("{} {}", req.method(), req.uri().path());
-    match (req.method(), req.uri().path()) {
+    let time = Instant::now();
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+    let res = match (&method, uri.path()) {
         (&Method::GET, "/") => handle_get_order_book(context).await,
         (&Method::GET, "/trades") => handle_get_trades(context).await,
         (&Method::POST, "/orders") => handle_open_order(context, req.into_body()).await,
         _ => not_found(),
-    }
+    }?;
+    debug!(
+        "{} {} {} {:?}",
+        method,
+        uri.path(),
+        res.status(),
+        time.elapsed()
+    );
+    Ok(res)
 }
 
 async fn handle_get_order_book(context: ApiContext) -> Result<Response<Body>, Infallible> {
