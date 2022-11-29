@@ -1,0 +1,25 @@
+### Get orderbook
+GET http://localhost:3000/
+
+### Get trades
+GET http://localhost:3000/trades
+
+### Place a selling order
+POST http://localhost:3000/orders
+Content-Type: application/json
+
+{
+  "price": 21,
+  "quantity": 250,
+  "side": "Sell"
+}
+
+### Place a buying order
+POST http://localhost:3000/orders
+Content-Type: application/json
+
+{
+  "price": 22,
+  "quantity": 500,
+  "side": "Buy"
+}
