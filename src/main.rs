@@ -1,17 +1,20 @@
 #![feature(iter_intersperse)]
 
 use log::{error, info};
+use prometheus::{HistogramOpts, HistogramVec, Registry};
 use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::config::Config;
 use crate::model::{ApiContext, State};
+use crate::utils::netflix_buckets;
 
 mod api;
 mod config;
 mod matcher;
 mod model;
+mod utils;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Read environment variables from .env
@@ -19,6 +22,17 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Initialize logger from environment
     env_logger::init();
+
+    let req_duration_histogram = HistogramVec::new(
+        HistogramOpts::new(
+            "request_duration_seconds",
+            "Duration of a request in seconds",
+        )
+        .buckets(netflix_buckets(10e3, 1e9)),
+        &["method", "path"],
+    )?;
+    let registry = Registry::new();
+    registry.register(Box::new(req_duration_histogram.clone()))?;
 
     // Parse config from environment
     let config = match envy::prefixed("APP_").from_env::<Config>() {
@@ -46,7 +60,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let (order_sender, order_receiver) = tokio::sync::mpsc::channel(32);
 
     // Spawn async API threads
-    let context = ApiContext::new(order_sender, state.clone());
+    let context = ApiContext::new(
+        registry,
+        req_duration_histogram,
+        order_sender,
+        state.clone(),
+    );
     let handle = rt.spawn(api::api(config, context));
 
     // Run the matcher

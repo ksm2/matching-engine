@@ -14,6 +14,7 @@ This project is a prototype for a matching engine developed in Rust.
   * [`GET /`](#get-)
   * [`GET /trades`](#get-trades)
   * [`POST /orders`](#post-orders)
+  * [`GET /metrics`](#get-metrics)
 
 
 ## Installing Rust
@@ -86,3 +87,7 @@ Opens a new order with the following structure:
   "side": "Sell"
 }
 ```
+
+### `GET /metrics`
+
+Provides Prometheus metrics.
