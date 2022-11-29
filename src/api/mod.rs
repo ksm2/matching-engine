@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 use std::ops::Deref;
 
-use hyper::header::CONTENT_TYPE;
+use hyper::header::{ALLOW, CONTENT_TYPE};
 use hyper::http::HeaderValue;
 use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
@@ -49,8 +49,14 @@ async fn handle(context: ApiContext, req: Request<Body>) -> Result<Response<Body
     let uri = req.uri().clone();
     let res = match (&method, uri.path()) {
         (&Method::GET, "/") => handle_get_order_book(context).await,
+        (_, "/") => method_not_allowed(&vec![Method::GET]),
+
         (&Method::GET, "/trades") => handle_get_trades(context).await,
+        (_, "/trades") => method_not_allowed(&vec![Method::GET]),
+
         (&Method::POST, "/orders") => handle_open_order(context, req.into_body()).await,
+        (_, "/orders") => method_not_allowed(&vec![Method::POST]),
+
         _ => not_found(),
     }?;
     debug!(
@@ -91,6 +97,21 @@ fn json_response<T: Serialize>(status: StatusCode, data: &T) -> Response<Body> {
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
     res
+}
+
+fn method_not_allowed(allow: &[Method]) -> Result<Response<Body>, Infallible> {
+    let mut res = Response::default();
+    *res.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
+
+    let headers = res.headers_mut();
+    let allow_str = allow
+        .iter()
+        .map(|m| m.as_str())
+        .intersperse(", ")
+        .collect::<String>();
+    headers.insert(ALLOW, allow_str.parse().unwrap());
+
+    Ok(res)
 }
 
 fn not_found() -> Result<Response<Body>, Infallible> {
