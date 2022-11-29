@@ -34,15 +34,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         .build()?;
     info!("Starting {} API threads", config.api_threads);
 
-    let (tx, rx) = tokio::sync::mpsc::channel(32);
+    // Initialize matching engine state:
+    // - State: Our data structure which holds the order book and trades
+    // - RwLock: A lock which allows many parallel reads or one write at a time
+    // - Arc: Allows different scopes to hold a reference to the lock
     let state = Arc::new(RwLock::new(State::new()));
 
+    // Initialize the order command message channel
+    let (order_sender, order_receiver) = tokio::sync::mpsc::channel(32);
+
     // Spawn async API threads
-    let context = ApiContext::new(tx, state.clone());
+    let context = ApiContext::new(order_sender, state.clone());
     let handle = rt.spawn(api::api(config, context));
 
     // Run the matcher
-    matcher::matcher(&rt, rx, state);
+    matcher::matcher(&rt, order_receiver, state);
     rt.block_on(handle)?;
 
     Ok(())

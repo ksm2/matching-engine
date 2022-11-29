@@ -1,20 +1,20 @@
+use crate::model::messages::{MessageChannel, MessagePort};
 use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
-use tokio::sync::oneshot::{Receiver, Sender as OneShotSender};
 use tokio::sync::{RwLock, RwLockReadGuard};
 
 use super::{OpenOrder, Order, OrderBook, State, Trade};
 
 #[derive(Debug, Clone)]
 pub struct ApiContext {
-    tx: Sender<(OpenOrder, OneShotSender<Order>)>,
+    matcher: Sender<MessagePort<OpenOrder, Order>>,
     state: Arc<RwLock<State>>,
 }
 
 impl ApiContext {
-    pub fn new(tx: Sender<(OpenOrder, OneShotSender<Order>)>, state: Arc<RwLock<State>>) -> Self {
-        Self { tx, state }
+    pub fn new(matcher: Sender<MessagePort<OpenOrder, Order>>, state: Arc<RwLock<State>>) -> Self {
+        Self { matcher, state }
     }
 
     pub async fn read_order_book(&self) -> RwLockReadGuard<OrderBook> {
@@ -29,10 +29,10 @@ impl ApiContext {
 
     pub async fn open_order(
         &self,
-        order: OpenOrder,
-    ) -> Result<Receiver<Order>, Box<dyn Error + Send + Sync>> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.tx.send((order, tx)).await?;
-        Ok(rx)
+        command: OpenOrder,
+    ) -> Result<Order, Box<dyn Error + Send + Sync>> {
+        let msg = MessageChannel::new(command);
+        let order = msg.send_to(&self.matcher).await?;
+        Ok(order)
     }
 }

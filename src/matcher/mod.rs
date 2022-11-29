@@ -1,24 +1,33 @@
-use log::debug;
+use log::{debug, info};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Receiver;
-use tokio::sync::oneshot::Sender;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
-use crate::model::{OpenOrder, Order, OrderId, Side, State, Trade};
+use crate::model::{MessagePort, OpenOrder, Order, OrderId, Side, State, Trade};
 
-pub fn matcher(rt: &Runtime, mut rx: Receiver<(OpenOrder, Sender<Order>)>, ob: Arc<RwLock<State>>) {
+pub fn matcher(
+    rt: &Runtime,
+    mut rx: Receiver<MessagePort<OpenOrder, Order>>,
+    ob: Arc<RwLock<State>>,
+) {
     let mut id = 0_u64;
     let mut matcher = Matcher::new(rt, ob);
-    while let Some((message, sender)) = rt.block_on(rx.recv()) {
+
+    info!("Matcher is listening for commands");
+    while let Some(message) = rt.block_on(rx.recv()) {
         id += 1;
-        debug!("Processing {:?}", message);
+
+        debug!("Processing {:?}", message.req);
 
         let mut order = Order::open(OrderId(id), message.side, message.price, message.quantity);
         matcher.process(&mut order);
         matcher.remove_filled_orders(order.side);
-        sender.send(order).unwrap();
+
+        message.reply(order).unwrap();
     }
+
+    info!("Matcher stopped listening for commands");
 }
 
 #[derive(Debug)]
