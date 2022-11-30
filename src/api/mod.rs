@@ -123,12 +123,8 @@ fn method_not_allowed(allow: &[Method]) -> Result<Response<Body>, Infallible> {
     *res.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
 
     let headers = res.headers_mut();
-    let allow_str = allow
-        .iter()
-        .map(|m| m.as_str())
-        .intersperse(", ")
-        .collect::<String>();
-    headers.insert(ALLOW, allow_str.parse().unwrap());
+    let allow_str = allow.iter().map(|m| m.as_str()).collect::<Vec<_>>();
+    headers.insert(ALLOW, allow_str.join(", ").parse().unwrap());
 
     Ok(res)
 }

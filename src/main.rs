@@ -1,5 +1,3 @@
-#![feature(iter_intersperse)]
-
 use log::{error, info};
 use prometheus::{HistogramOpts, HistogramVec, Registry};
 use std::error::Error;
