@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::io::Write;
 use std::ops::Deref;
 
 use hyper::header::{ALLOW, CONTENT_TYPE};
@@ -105,6 +106,8 @@ fn handle_metrics(context: &ApiContext) -> Result<Response<Body>, Infallible> {
     let metrics = context.gather_metrics();
 
     encoder.encode(&metrics, &mut buffer).unwrap();
+    writeln!(&mut buffer, "# EOF").unwrap();
+
     let res = Response::builder()
         .header(
             CONTENT_TYPE,
