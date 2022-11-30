@@ -1,0 +1,7 @@
+.git/
+.github/
+.idea/
+scripts/
+target/
+*.http
+.env*
