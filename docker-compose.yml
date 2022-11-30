@@ -1,0 +1,6 @@
+services:
+  prometheus:
+    image: prom/prometheus:v2.40.4
+    network_mode: host
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
