@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             "request_duration_seconds",
             "Duration of a request in seconds",
         )
-        .buckets(netflix_buckets(1e3, 1e9)),
+        .buckets(netflix_buckets(1e3, 1e8)),
         &["method", "path"],
     )?;
     let registry = Registry::new();
