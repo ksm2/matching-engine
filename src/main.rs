@@ -21,6 +21,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Initialize logger from environment
     env_logger::init();
 
+    info!("Matching engine started");
+
     let req_duration_histogram = HistogramVec::new(
         HistogramOpts::new(
             "request_duration_seconds",
@@ -70,5 +72,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     matcher::matcher(&rt, order_receiver, state);
     rt.block_on(handle)?;
 
+    info!("Matching engine stopped");
     Ok(())
 }

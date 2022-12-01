@@ -10,6 +10,7 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use log::{debug, error, info};
 use prometheus::{Encoder, TextEncoder};
 use serde::Serialize;
+use tokio::signal;
 use tokio::time::Instant;
 
 use crate::config::Config;
@@ -38,36 +39,56 @@ pub async fn api(config: Config, context: ApiContext) {
         async move { Ok::<_, Infallible>(service) }
     });
 
+    // Bind server to address
     let server = Server::bind(&addr).serve(make_service);
+
+    // Listen to Ctrl C being triggered for graceful shutdown
+    let graceful = server.with_graceful_shutdown(async {
+        signal::ctrl_c().await.ok();
+    });
+
+    // Listen for requests
     info!("Server is running on http://{}", addr);
-    if let Err(e) = server.await {
+    if let Err(e) = graceful.await {
         error!("Server error: {}", e);
     }
+
+    info!("Server has shut down");
 }
 
+/// Handles an incoming request
 async fn handle(context: ApiContext, req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    let time = Instant::now();
     let method = req.method().clone();
     let uri = req.uri().clone();
-    let res = match (&method, uri.path()) {
-        (&Method::GET, "/") => handle_get_order_book(&context).await,
-        (_, "/") => method_not_allowed(&[Method::GET]),
 
-        (&Method::GET, "/trades") => handle_get_trades(&context).await,
-        (_, "/trades") => method_not_allowed(&[Method::GET]),
-
-        (&Method::POST, "/orders") => handle_open_order(&context, req.into_body()).await,
-        (_, "/orders") => method_not_allowed(&[Method::POST]),
-
-        (&Method::GET, "/metrics") => handle_metrics(&context),
-        (_, "/metrics") => method_not_allowed(&[Method::GET]),
-
-        _ => not_found(),
-    }?;
+    let time = Instant::now();
+    let res = handle_routing(&context, req).await?;
     let elapsed = time.elapsed();
+
     context.observe_req_duration(&method, uri.path(), elapsed);
     debug!("{} {} {} {:?}", &method, uri.path(), res.status(), elapsed);
     Ok(res)
+}
+
+async fn handle_routing(
+    context: &ApiContext,
+    req: Request<Body>,
+) -> Result<Response<Body>, Infallible> {
+    match (req.method(), req.uri().path()) {
+        (&Method::GET, "/") => handle_get_order_book(context).await,
+        (_other_method, "/") => method_not_allowed(&[Method::GET]),
+
+        (&Method::GET, "/trades") => handle_get_trades(context).await,
+        (_other_method, "/trades") => method_not_allowed(&[Method::GET]),
+
+        (&Method::POST, "/orders") => handle_open_order(context, req.into_body()).await,
+        (_other_method, "/orders") => method_not_allowed(&[Method::POST]),
+
+        (&Method::GET, "/metrics") => handle_metrics(context),
+        (_other_method, "/metrics") => method_not_allowed(&[Method::GET]),
+
+        _ => not_found(),
+    }
 }
 
 async fn handle_get_order_book(context: &ApiContext) -> Result<Response<Body>, Infallible> {
@@ -118,6 +139,7 @@ fn handle_metrics(context: &ApiContext) -> Result<Response<Body>, Infallible> {
     Ok(res)
 }
 
+/// Return a 405 Method Not Allowed response
 fn method_not_allowed(allow: &[Method]) -> Result<Response<Body>, Infallible> {
     let mut res = Response::default();
     *res.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
@@ -129,6 +151,7 @@ fn method_not_allowed(allow: &[Method]) -> Result<Response<Body>, Infallible> {
     Ok(res)
 }
 
+/// Return a 404 Not Found response
 fn not_found() -> Result<Response<Body>, Infallible> {
     let mut res = Response::default();
     *res.status_mut() = StatusCode::NOT_FOUND;
