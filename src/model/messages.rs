@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::fmt::Debug;
 use std::ops::Deref;
 use tokio::sync::mpsc;
@@ -25,7 +24,7 @@ where
     pub async fn send_to(
         self,
         target: &mpsc::Sender<MessagePort<Req, Res>>,
-    ) -> Result<Res, Box<dyn Error + Send + Sync>> {
+    ) -> Result<Res, anyhow::Error> {
         target.send(self.port).await?;
         let response = self.receiver.await?;
         Ok(response)

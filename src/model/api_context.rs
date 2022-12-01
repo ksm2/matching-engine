@@ -2,7 +2,6 @@ use crate::model::messages::{MessageChannel, MessagePort};
 use hyper::Method;
 use prometheus::proto::MetricFamily;
 use prometheus::{HistogramVec, Registry};
-use std::error::Error;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
@@ -43,10 +42,7 @@ impl ApiContext {
         RwLockReadGuard::map(state, |s| &s.trades)
     }
 
-    pub async fn open_order(
-        &self,
-        command: OpenOrder,
-    ) -> Result<Order, Box<dyn Error + Send + Sync>> {
+    pub async fn open_order(&self, command: OpenOrder) -> Result<Order, anyhow::Error> {
         let msg = MessageChannel::new(command);
         let order = msg.send_to(&self.matcher).await?;
         Ok(order)

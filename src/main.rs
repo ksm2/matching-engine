@@ -1,6 +1,6 @@
-use log::{error, info};
+use anyhow::{bail, Result};
+use log::info;
 use prometheus::{HistogramOpts, HistogramVec, Registry};
-use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -14,7 +14,7 @@ mod matcher;
 mod model;
 mod utils;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     // Read environment variables from .env
     dotenv::dotenv().ok();
 
@@ -37,10 +37,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Parse config from environment
     let config = match envy::prefixed("APP_").from_env::<Config>() {
         Ok(config) => config,
-        Err(e) => {
-            error!("Failed to parse config: {}", e);
-            return Ok(());
-        }
+        Err(e) => bail!("Failed to parse config: {}", e),
     };
 
     // Create async runtime
