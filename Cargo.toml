@@ -1,5 +1,6 @@
 [package]
 name = "matching-engine"
+description = "A high-performance matching engine written in Rust"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.65"
@@ -8,6 +9,7 @@ rust-version = "1.65"
 
 [dependencies]
 anyhow = { version = "=1.0.65", features = ["backtrace"] }
+clap = { version = "4.0", features = ["cargo", "derive"] }
 dotenv = "0.15"
 env_logger = "0.10"
 envy = "0.4"

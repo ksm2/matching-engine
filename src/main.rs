@@ -1,4 +1,5 @@
 use anyhow::{bail, Result};
+use clap::{crate_version, Parser};
 use log::info;
 use prometheus::{HistogramOpts, HistogramVec, Registry};
 use std::sync::Arc;
@@ -14,7 +15,14 @@ mod matcher;
 mod model;
 mod utils;
 
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {}
+
 fn main() -> Result<()> {
+    // Parse CLI arguments
+    Cli::parse();
+
     // Read environment variables from .env
     dotenv::dotenv().ok();
 
@@ -22,6 +30,7 @@ fn main() -> Result<()> {
     env_logger::init();
 
     info!("Matching engine started");
+    info!("Version: {}", crate_version!());
 
     let req_duration_histogram = HistogramVec::new(
         HistogramOpts::new(
