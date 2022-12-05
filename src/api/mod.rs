@@ -53,7 +53,7 @@ pub async fn api(config: Config, context: Context) {
     });
 
     // Bind server to address
-    let server = Server::bind(&addr).serve(make_service);
+    let server = Server::bind(&addr).tcp_nodelay(true).serve(make_service);
 
     // Listen to Ctrl C being triggered for graceful shutdown
     let graceful = server.with_graceful_shutdown(async {
