@@ -1,7 +1,10 @@
+mod disconnect;
+
 use std::convert::Infallible;
 use std::io::Write;
 use std::ops::Deref;
 
+use disconnect::with_disconnect_fn;
 use hyper::header::{ALLOW, CONTENT_TYPE};
 use hyper::http::HeaderValue;
 use hyper::server::conn::AddrStream;
@@ -35,8 +38,13 @@ pub async fn api(config: Config, context: ApiContext) {
         // Create a `Service` for responding to the request.
         let service = service_fn(move |req| handle(context.clone(), req));
 
+        // Listen for the service being disconnected.
+        let dropping = with_disconnect_fn(service, move || {
+            debug!("Disconnected {}", addr);
+        });
+
         // Return the service to hyper.
-        async move { Ok::<_, Infallible>(service) }
+        async move { Ok::<_, Infallible>(dropping) }
     });
 
     // Bind server to address
