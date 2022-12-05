@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use clap::{crate_version, Parser};
 use log::info;
-use prometheus::{HistogramOpts, HistogramVec, Registry};
+use prometheus::{HistogramOpts, HistogramVec, IntGauge, Registry};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -32,6 +32,8 @@ fn main() -> Result<()> {
     info!("Matching engine started");
     info!("Version: {}", crate_version!());
 
+    let registry = Registry::new();
+
     let req_duration_histogram = HistogramVec::new(
         HistogramOpts::new(
             "request_duration_seconds",
@@ -40,8 +42,10 @@ fn main() -> Result<()> {
         .buckets(netflix_buckets(1e3, 1e8)),
         &["method", "path"],
     )?;
-    let registry = Registry::new();
     registry.register(Box::new(req_duration_histogram.clone()))?;
+
+    let connection_gauge = IntGauge::new("connected_clients", "Number of connected clients")?;
+    registry.register(Box::new(connection_gauge.clone()))?;
 
     // Parse config from environment
     let config = match envy::prefixed("APP_").from_env::<Config>() {
@@ -69,6 +73,7 @@ fn main() -> Result<()> {
     let context = ApiContext::new(
         registry,
         req_duration_histogram,
+        connection_gauge,
         order_sender,
         state.clone(),
     );

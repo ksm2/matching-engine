@@ -34,13 +34,17 @@ pub async fn api(config: Config, context: ApiContext) {
         // You can grab the address of the incoming connection like so.
         let addr = conn.remote_addr();
         debug!("Connected {}", addr);
+        context.inc_connections();
 
         // Create a `Service` for responding to the request.
-        let service = service_fn(move |req| handle(context.clone(), req));
+        let ctx = context.clone();
+        let service = service_fn(move |req| handle(ctx.clone(), req));
 
         // Listen for the service being disconnected.
+        let ctx = context.clone();
         let dropping = with_disconnect_fn(service, move || {
             debug!("Disconnected {}", addr);
+            ctx.dec_connections();
         });
 
         // Return the service to hyper.
