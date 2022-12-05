@@ -1,6 +1,6 @@
 const DIGITS: i64 = 2;
 
-pub fn netflix_buckets(min: f64, max: f64) -> Vec<f64> {
+pub(super) fn netflix_buckets(min: f64, max: f64) -> Vec<f64> {
     let mut buckets = all_buckets()
         .into_iter()
         .filter(|&f| f > min && f < max)

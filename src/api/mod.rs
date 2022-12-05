@@ -1,10 +1,11 @@
+mod buckets;
+mod context;
 mod disconnect;
 
 use std::convert::Infallible;
 use std::io::Write;
 use std::ops::Deref;
 
-use disconnect::with_disconnect_fn;
 use hyper::header::{ALLOW, CONTENT_TYPE};
 use hyper::http::HeaderValue;
 use hyper::server::conn::AddrStream;
@@ -16,10 +17,11 @@ use serde::Serialize;
 use tokio::signal;
 use tokio::time::Instant;
 
+pub use self::context::Context;
+use self::disconnect::with_disconnect_fn;
 use crate::config::Config;
-use crate::model::ApiContext;
 
-pub async fn api(config: Config, context: ApiContext) {
+pub async fn api(config: Config, context: Context) {
     let Ok(addr) = config.host.parse() else {
         error!("Could not parse APP_HOST: {}", config.host);
         return;
@@ -41,10 +43,9 @@ pub async fn api(config: Config, context: ApiContext) {
         let service = service_fn(move |req| handle(ctx.clone(), req));
 
         // Listen for the service being disconnected.
-        let ctx = context.clone();
         let dropping = with_disconnect_fn(service, move || {
             debug!("Disconnected {}", addr);
-            ctx.dec_connections();
+            context.dec_connections();
         });
 
         // Return the service to hyper.
@@ -69,7 +70,7 @@ pub async fn api(config: Config, context: ApiContext) {
 }
 
 /// Handles an incoming request
-async fn handle(context: ApiContext, req: Request<Body>) -> Result<Response<Body>, Infallible> {
+async fn handle(context: Context, req: Request<Body>) -> Result<Response<Body>, Infallible> {
     let method = req.method().clone();
     let uri = req.uri().clone();
 
@@ -83,7 +84,7 @@ async fn handle(context: ApiContext, req: Request<Body>) -> Result<Response<Body
 }
 
 async fn handle_routing(
-    context: &ApiContext,
+    context: &Context,
     req: Request<Body>,
 ) -> Result<Response<Body>, Infallible> {
     match (req.method(), req.uri().path()) {
@@ -103,19 +104,19 @@ async fn handle_routing(
     }
 }
 
-async fn handle_get_order_book(context: &ApiContext) -> Result<Response<Body>, Infallible> {
+async fn handle_get_order_book(context: &Context) -> Result<Response<Body>, Infallible> {
     let order_book = context.read_order_book().await;
     let res = json_response(StatusCode::OK, &order_book.deref());
     Ok(res)
 }
 
-async fn handle_get_trades(context: &ApiContext) -> Result<Response<Body>, Infallible> {
+async fn handle_get_trades(context: &Context) -> Result<Response<Body>, Infallible> {
     let trades = context.read_trades().await;
     let res = json_response(StatusCode::OK, &trades.deref());
     Ok(res)
 }
 
-async fn handle_open_order(context: &ApiContext, req: Body) -> Result<Response<Body>, Infallible> {
+async fn handle_open_order(context: &Context, req: Body) -> Result<Response<Body>, Infallible> {
     let str = hyper::body::to_bytes(req).await.unwrap();
     let order = serde_json::from_slice(&str).unwrap();
     let order = context.open_order(order).await.unwrap();
@@ -133,7 +134,7 @@ fn json_response<T: Serialize>(status: StatusCode, data: &T) -> Response<Body> {
     res
 }
 
-fn handle_metrics(context: &ApiContext) -> Result<Response<Body>, Infallible> {
+fn handle_metrics(context: &Context) -> Result<Response<Body>, Infallible> {
     let mut buffer = vec![];
     let encoder = TextEncoder::new();
     let metrics = context.gather_metrics();

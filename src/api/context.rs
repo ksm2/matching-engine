@@ -1,16 +1,17 @@
-use crate::model::messages::{MessageChannel, MessagePort};
+use anyhow::Result;
 use hyper::Method;
 use prometheus::proto::MetricFamily;
-use prometheus::{HistogramVec, IntGauge, Registry};
+use prometheus::{HistogramOpts, HistogramVec, IntGauge, Registry};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{RwLock, RwLockReadGuard};
 
-use super::{OpenOrder, Order, OrderBook, State, Trade};
+use super::buckets::netflix_buckets;
+use crate::model::{MessageChannel, MessagePort, OpenOrder, Order, OrderBook, State, Trade};
 
 #[derive(Debug, Clone)]
-pub struct ApiContext {
+pub struct Context {
     registry: Registry,
     req_duration_histogram: HistogramVec,
     connection_gauge: IntGauge,
@@ -18,21 +19,32 @@ pub struct ApiContext {
     state: Arc<RwLock<State>>,
 }
 
-impl ApiContext {
+impl Context {
     pub fn new(
         registry: Registry,
-        req_duration_histogram: HistogramVec,
-        connection_gauge: IntGauge,
         matcher: Sender<MessagePort<OpenOrder, Order>>,
         state: Arc<RwLock<State>>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        let req_duration_histogram = HistogramVec::new(
+            HistogramOpts::new(
+                "request_duration_seconds",
+                "Duration of a request in seconds",
+            )
+            .buckets(netflix_buckets(1e3, 1e8)),
+            &["method", "path"],
+        )?;
+        registry.register(Box::new(req_duration_histogram.clone()))?;
+
+        let connection_gauge = IntGauge::new("connected_clients", "Number of connected clients")?;
+        registry.register(Box::new(connection_gauge.clone()))?;
+
+        Ok(Self {
             registry,
             req_duration_histogram,
             connection_gauge,
             matcher,
             state,
-        }
+        })
     }
 
     pub async fn read_order_book(&self) -> RwLockReadGuard<OrderBook> {

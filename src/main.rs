@@ -1,19 +1,17 @@
 use anyhow::{bail, Result};
 use clap::{crate_version, Parser};
 use log::info;
-use prometheus::{HistogramOpts, HistogramVec, IntGauge, Registry};
+use prometheus::Registry;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::config::Config;
-use crate::model::{ApiContext, State};
-use crate::utils::netflix_buckets;
+use crate::model::State;
 
 mod api;
 mod config;
 mod matcher;
 mod model;
-mod utils;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -33,19 +31,6 @@ fn main() -> Result<()> {
     info!("Version: {}", crate_version!());
 
     let registry = Registry::new();
-
-    let req_duration_histogram = HistogramVec::new(
-        HistogramOpts::new(
-            "request_duration_seconds",
-            "Duration of a request in seconds",
-        )
-        .buckets(netflix_buckets(1e3, 1e8)),
-        &["method", "path"],
-    )?;
-    registry.register(Box::new(req_duration_histogram.clone()))?;
-
-    let connection_gauge = IntGauge::new("connected_clients", "Number of connected clients")?;
-    registry.register(Box::new(connection_gauge.clone()))?;
 
     // Parse config from environment
     let config = match envy::prefixed("APP_").from_env::<Config>() {
@@ -70,13 +55,7 @@ fn main() -> Result<()> {
     let (order_sender, order_receiver) = tokio::sync::mpsc::channel(32);
 
     // Spawn async API threads
-    let context = ApiContext::new(
-        registry,
-        req_duration_histogram,
-        connection_gauge,
-        order_sender,
-        state.clone(),
-    );
+    let context = api::Context::new(registry, order_sender, state.clone())?;
     let handle = rt.spawn(api::api(config, context));
 
     // Run the matcher
