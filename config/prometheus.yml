@@ -4,4 +4,4 @@ global:
 scrape_configs:
   - job_name: matching_engine
     static_configs:
-      - targets: ["localhost:3000"]
+      - targets: ["matching-engine:3000"]
