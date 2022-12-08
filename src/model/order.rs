@@ -1,6 +1,7 @@
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::model::side::Side;
 
@@ -22,12 +23,15 @@ pub struct Order {
     pub price: Decimal,
     pub quantity: Decimal,
     pub filled: Decimal,
+    pub created_at: u128,
 }
 
 impl Order {
     pub fn open(id: OrderId, side: Side, price: Decimal, quantity: Decimal) -> Self {
         let status = OrderStatus::Open;
         let filled = Decimal::ZERO;
+        let now = SystemTime::now();
+        let created_at = now.duration_since(UNIX_EPOCH).unwrap().as_nanos();
         Self {
             id,
             side,
@@ -35,6 +39,7 @@ impl Order {
             price,
             quantity,
             filled,
+            created_at,
         }
     }
 
@@ -79,9 +84,19 @@ impl PartialOrd for Order {
             return None;
         }
 
-        match self.side {
-            Side::Buy => Some(self.price.cmp(&other.price)),
-            Side::Sell => Some(other.price.cmp(&self.price)),
+        return Some(self.cmp(&other));
+    }
+}
+
+impl Ord for Order {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.price.cmp(&other.price) {
+            Ordering::Equal => self.created_at.cmp(&other.created_at),
+            ordering => match self.side {
+                Side::Buy => ordering,
+                // the reverse ordering is used to construct min heap for sell orders
+                Side::Sell => ordering.reverse(),
+            },
         }
     }
 }
@@ -90,6 +105,7 @@ impl PartialOrd for Order {
 mod tests {
     use super::*;
     use rust_decimal_macros::dec;
+    use std::{thread, time};
 
     #[test]
     fn should_not_order_two_different_orders() {
@@ -112,6 +128,17 @@ mod tests {
     fn should_compare_two_asks() {
         let o1 = Order::open(OrderId(1), Side::Sell, dec!(12), dec!(500));
         let o2 = Order::open(OrderId(2), Side::Sell, dec!(11), dec!(600));
+
+        assert!(o1.lt(&o2));
+        assert!(o2.gt(&o1));
+    }
+
+    #[test]
+    fn should_compare_two_asks_with_different_creation_time() {
+        let o1 = Order::open(OrderId(1), Side::Sell, dec!(12), dec!(600));
+        let one_ms = time::Duration::from_millis(1);
+        thread::sleep(one_ms);
+        let o2 = Order::open(OrderId(2), Side::Sell, dec!(12), dec!(600));
 
         assert!(o1.lt(&o2));
         assert!(o2.gt(&o1));
