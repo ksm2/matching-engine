@@ -4,7 +4,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
-use crate::model::{MessagePort, OpenOrder, Order, OrderId, Side, State, Trade};
+use crate::model::{MessagePort, OpenOrder, Order, OrderId, Side, State, Trade, OrderType};
 
 pub fn matcher(
     rt: &Runtime,
@@ -20,7 +20,7 @@ pub fn matcher(
 
         debug!("Processing {:?}", message.req);
 
-        let mut order = Order::open(OrderId(id), message.side, message.price, message.quantity);
+        let mut order = Order::open(OrderId(id), message.side, message.order_type, message.price, message.quantity);
         matcher.process(&mut order);
         matcher.remove_filled_orders(order.side);
 
@@ -57,7 +57,7 @@ impl<'a> Matcher<'a> {
         };
 
         for other_order in opposite_orders.iter_mut() {
-            if !order.crosses(other_order) {
+            if order.order_type == OrderType::Limit && !order.crosses(other_order) {
                 continue;
             }
 
@@ -67,7 +67,7 @@ impl<'a> Matcher<'a> {
             }
         }
 
-        if !order.is_filled() {
+        if !order.is_filled() && order.order_type == OrderType::Limit {
             debug!("Placing order of {} at {}", order.unfilled(), order.price);
             state
                 .order_book
