@@ -87,7 +87,7 @@ impl<'a> Matcher<'a> {
         order.fill(used_qty);
         debug!("Filled bid at {}", other.price);
 
-        let trade = Trade::new(other.price, other.quantity, buy_order_id, sell_order_id);
+        let trade = Trade::new(other.price, used_qty, buy_order_id, sell_order_id);
         state.push_trade(trade);
 
         state.order_book.take(!order.side, other.price, used_qty);
