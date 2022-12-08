@@ -7,7 +7,9 @@ use tokio::sync::mpsc::Receiver;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
 use crate::config::Config;
-use crate::model::{MessagePort, OpenOrder, Order, OrderId, Side, State, Trade, WriteAheadLog};
+use crate::model::{
+    MessagePort, OpenOrder, Order, OrderId, OrderType, Side, State, Trade, WriteAheadLog,
+};
 
 pub fn matcher(
     config: Config,
@@ -26,7 +28,13 @@ pub fn matcher(
 
         debug!("Processing {:?}", message.req);
 
-        let mut order = Order::open(OrderId(id), message.side, message.price, message.quantity);
+        let mut order = Order::open(
+            OrderId(id),
+            message.side,
+            message.order_type,
+            message.price,
+            message.quantity,
+        );
         matcher.save_command(&order);
         matcher.process(&mut order);
 
@@ -85,7 +93,7 @@ impl Matcher {
                 };
                 let other = peek_other.deref_mut();
 
-                if !other.crosses(order) {
+                if order.order_type == OrderType::Limit && !other.crosses(order) {
                     break;
                 }
 
@@ -98,7 +106,7 @@ impl Matcher {
             }
         }
 
-        if !order.is_filled() {
+        if !order.is_filled() && order.order_type == OrderType::Limit {
             debug!("Placing order of {} at {}", order.unfilled(), order.price);
             state
                 .order_book
