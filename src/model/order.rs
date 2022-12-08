@@ -84,7 +84,7 @@ impl PartialOrd for Order {
             return None;
         }
 
-        return Some(self.cmp(&other));
+        Some(self.cmp(other))
     }
 }
 
