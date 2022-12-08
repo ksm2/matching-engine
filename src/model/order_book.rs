@@ -36,9 +36,6 @@ impl OrderBook {
             match existing_bid.price.cmp(&bid_price) {
                 Ordering::Equal => {
                     existing_bid.quantity += bid_qty;
-                    if index == 0 {
-                        self.best_bid = Some(existing_bid.quantity);
-                    }
                     return;
                 }
                 Ordering::Less => {
@@ -64,9 +61,6 @@ impl OrderBook {
             match existing_ask.price.cmp(&ask_price) {
                 Ordering::Equal => {
                     existing_ask.quantity += ask_qty;
-                    if index == 0 {
-                        self.best_ask = Some(existing_ask.quantity);
-                    }
                     return;
                 }
                 Ordering::Greater => {
@@ -225,6 +219,18 @@ mod tests {
     }
 
     #[test]
+    fn should_bid_the_same_price() {
+        let mut o = OrderBook::new();
+        o.place_bid(dec!(11), dec!(200));
+        assert_eq!(o.bids, vec![PricePair::new(dec!(11), dec!(200))]);
+        assert_eq!(o.best_bid, Some(dec!(11)));
+
+        o.place_bid(dec!(11), dec!(100));
+        assert_eq!(o.bids, vec![PricePair::new(dec!(11), dec!(300))]);
+        assert_eq!(o.best_bid, Some(dec!(11)));
+    }
+
+    #[test]
     fn should_ask_a_new_price() {
         let mut o = OrderBook::new();
         o.place_ask(dec!(11), dec!(200));
@@ -291,6 +297,17 @@ mod tests {
         o.take_ask(dec!(12), dec!(500));
         assert_eq!(o.asks, vec![]);
         assert_eq!(o.best_ask, None);
+    }
+
+    #[test]
+    fn should_ask_the_same_price() {
+        let mut o = OrderBook::new();
+        o.place_ask(dec!(11), dec!(200));
+        assert_eq!(o.asks, vec![PricePair::new(dec!(11), dec!(200))]);
+        assert_eq!(o.best_ask, Some(dec!(11)));
+
+        o.place_ask(dec!(11), dec!(100));
+        assert_eq!(o.best_ask, Some(dec!(11)));
     }
 
     #[test]
