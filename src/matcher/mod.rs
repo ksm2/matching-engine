@@ -1,4 +1,6 @@
 use log::{debug, info};
+use std::collections::BinaryHeap;
+use std::ops::DerefMut;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Receiver;
@@ -22,8 +24,6 @@ pub fn matcher(
 
         let mut order = Order::open(OrderId(id), message.side, message.price, message.quantity);
         matcher.process(&mut order);
-        matcher.remove_filled_orders(order.side);
-
         message.reply(order).unwrap();
     }
 
@@ -34,8 +34,8 @@ pub fn matcher(
 struct Matcher<'a> {
     rt: &'a Runtime,
     state: Arc<RwLock<State>>,
-    bids: Vec<Order>,
-    asks: Vec<Order>,
+    bids: BinaryHeap<Order>,
+    asks: BinaryHeap<Order>,
 }
 
 impl<'a> Matcher<'a> {
@@ -43,8 +43,8 @@ impl<'a> Matcher<'a> {
         Self {
             rt,
             state,
-            bids: Vec::new(),
-            asks: Vec::new(),
+            bids: BinaryHeap::new(),
+            asks: BinaryHeap::new(),
         }
     }
 
@@ -56,14 +56,24 @@ impl<'a> Matcher<'a> {
             Side::Sell => &mut self.bids,
         };
 
-        for other_order in opposite_orders.iter_mut() {
-            if !order.crosses(other_order) {
-                continue;
-            }
+        while !order.is_filled() {
+            let filled = {
+                let mut peek_other = match opposite_orders.peek_mut() {
+                    None => break,
+                    Some(o) => o,
+                };
+                let other = peek_other.deref_mut();
 
-            Matcher::execute_trade(&mut state, order, other_order);
-            if order.is_filled() {
-                return;
+                if !other.crosses(order) {
+                    break;
+                }
+
+                Matcher::execute_trade(&mut state, order, other);
+                other.is_filled()
+            };
+
+            if filled {
+                opposite_orders.pop();
             }
         }
 
@@ -99,13 +109,5 @@ impl<'a> Matcher<'a> {
             Side::Buy => self.bids.push(order),
             Side::Sell => self.asks.push(order),
         }
-    }
-
-    pub fn remove_filled_orders(&mut self, side: Side) {
-        let orders = match side {
-            Side::Buy => &mut self.asks,
-            Side::Sell => &mut self.bids,
-        };
-        orders.retain(|order| !order.is_filled());
     }
 }

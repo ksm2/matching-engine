@@ -9,7 +9,7 @@ POST http://localhost:3000/orders
 Content-Type: application/json
 
 {
-  "price": 21,
+  "price": 20,
   "quantity": 250,
   "side": "Sell"
 }
