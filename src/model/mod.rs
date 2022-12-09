@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 pub use messages::{MessageChannel, MessagePort};
 pub use order::{Order, OrderId, OrderStatus};
 pub use order_book::{OrderBook, PricePair};
+pub use order_type::OrderType;
 pub use side::Side;
 pub use state::State;
-pub use order_type::OrderType;
 pub use trade::Trade;
 
 mod messages;

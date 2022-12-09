@@ -4,7 +4,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
-use crate::model::{MessagePort, OpenOrder, Order, OrderId, Side, State, Trade, OrderType};
+use crate::model::{MessagePort, OpenOrder, Order, OrderId, OrderType, Side, State, Trade};
 
 pub fn matcher(
     rt: &Runtime,
@@ -20,7 +20,13 @@ pub fn matcher(
 
         debug!("Processing {:?}", message.req);
 
-        let mut order = Order::open(OrderId(id), message.side, message.order_type, message.price, message.quantity);
+        let mut order = Order::open(
+            OrderId(id),
+            message.side,
+            message.order_type,
+            message.price,
+            message.quantity,
+        );
         matcher.process(&mut order);
         matcher.remove_filled_orders(order.side);
 
