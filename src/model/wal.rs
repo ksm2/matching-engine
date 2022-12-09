@@ -28,12 +28,11 @@ impl WriteAheadLog {
         // Serialization
         let entry = match serde_json::to_string(order) {
             Ok(e) => e,
-            Err(_) => bail!("Failed to parser"),
+            Err(_) => bail!("Failed to parse"),
         };
 
         // Write on file
-        self.file.write_all(entry.as_bytes())?;
-        self.file.write_all(b"\n")?;
+        writeln!(self.file, "{}", entry)?;
         self.file.flush()?;
 
         Ok(())
