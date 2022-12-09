@@ -4,6 +4,9 @@ GET http://localhost:3000/
 ### Get trades
 GET http://localhost:3000/trades
 
+### Get orders
+GET http://localhost:3000/
+
 ### Place a selling order
 POST http://localhost:3000/orders
 Content-Type: application/json
@@ -11,7 +14,8 @@ Content-Type: application/json
 {
   "price": 21,
   "quantity": 250,
-  "side": "Sell"
+  "side": "Sell",
+  "order_type": "Limit"
 }
 
 ### Place a buying order
@@ -21,5 +25,6 @@ Content-Type: application/json
 {
   "price": 22,
   "quantity": 500,
-  "side": "Buy"
+  "side": "Buy",
+  "order_type": "Limit"
 }
