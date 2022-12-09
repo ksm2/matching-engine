@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::config::Config;
-use crate::model::State;
+use crate::model::{OrderBook, State};
 
 mod api;
 mod config;
@@ -51,15 +51,17 @@ fn main() -> Result<()> {
     // - Arc: Allows different scopes to hold a reference to the lock
     let state = Arc::new(RwLock::new(State::new()));
 
+    let (book_sender, book_receiver) = tokio::sync::broadcast::channel::<OrderBook>(32);
+
     // Initialize the order command message channel
     let (order_sender, order_receiver) = tokio::sync::mpsc::channel(32);
 
     // Spawn async API threads
-    let context = api::Context::new(registry, order_sender, state.clone())?;
+    let context = api::Context::new(registry, order_sender, book_receiver, state.clone())?;
     let handle = rt.spawn(api::api(config, context));
 
     // Run the matcher
-    matcher::matcher(&rt, order_receiver, state);
+    matcher::matcher(&rt, book_sender, order_receiver, state);
     rt.block_on(handle)?;
 
     info!("Matching engine stopped");

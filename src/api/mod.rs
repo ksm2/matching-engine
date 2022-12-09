@@ -90,6 +90,7 @@ async fn handle(context: Context, req: Request<Body>) -> Result<Response<Body>, 
 async fn handle_routing(context: &Context, req: Request<Body>) -> HttpResult<Response<Body>> {
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => handle_get_order_book(context).await,
+        (&Method::GET, "/stream") => handle_stream(context).await,
         (_other_method, "/") => method_not_allowed(&[Method::GET]),
 
         (&Method::GET, "/trades") => handle_get_trades(context).await,
@@ -103,6 +104,20 @@ async fn handle_routing(context: &Context, req: Request<Body>) -> HttpResult<Res
 
         _ => not_found(),
     }
+}
+
+async fn handle_stream(context: &Context) -> HttpResult<Response<Body>> {
+    let stream = futures::stream::unfold((), move |state| async move {
+        let book = context.book_receiver.recv().await?;
+        let json = serde_json::to_string(book).unwrap();
+        let bytes = json.into();
+        let result: Result<Vec<u8>, Infallible> = Ok(bytes);
+        Some((result, ()))
+    });
+
+    let mut body = Body::wrap_stream(stream);
+    let mut res = Response::new(body);
+    Ok(res)
 }
 
 async fn handle_get_order_book(context: &Context) -> HttpResult<Response<Body>> {

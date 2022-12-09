@@ -72,6 +72,9 @@ impl<'a> Matcher<'a> {
             state
                 .order_book
                 .place(order.side, order.price, order.unfilled());
+
+            self.book_sender.send(state.order_book);
+
             drop(state);
             self.push_order(order.clone());
         }
