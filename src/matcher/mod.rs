@@ -1,6 +1,5 @@
 use log::{debug, info};
 use std::sync::Arc;
-use rust_decimal_macros::dec;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::{RwLock, RwLockWriteGuard};
@@ -125,39 +124,102 @@ mod tests {
     fn should_create_new_bid() {
         let rt = tokio::runtime::Builder::new_multi_thread().build().unwrap();
         let ob = Arc::new(RwLock::new(State::new()));
-        let mut matcher = Matcher::new(&rt, ob);
+        let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
 
         let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(10), dec!(100));
         matcher.process(&mut o);
         matcher.remove_filled_orders(Side::Sell);
 
-        assert_eq!(matcher.asks.len(), 0);
-        assert_eq!(matcher.bids.len(), 1);
-        assert_eq!(matcher.bids[0].price, dec!(10));
-        assert_eq!(matcher.bids[0].quantity, dec!(100));
+        let new_state = rt.block_on(ob.read());
+        assert_eq!(new_state.order_book.asks, vec![]);
+        assert_eq!(new_state.order_book.bids, vec![PricePair::new(dec!(10), dec!(100))]);
+        assert_eq!(matcher.asks, vec![]);
+        assert_eq!(matcher.bids, vec![
+            Order{
+                id: OrderId(1),
+                side: Side::Buy,
+                order_type: OrderType::Limit,
+                status: OrderStatus::Open,
+                price: dec!(10),
+                quantity: dec!(100),
+                filled: dec!(0)
+            }
+        ]);
     }
 
     #[test]
     fn should_create_new_ask() {
         let rt = tokio::runtime::Builder::new_multi_thread().build().unwrap();
         let ob = Arc::new(RwLock::new(State::new()));
-        let mut matcher = Matcher::new(&rt, ob);
+        let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
 
         let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
         matcher.process(&mut o);
         matcher.remove_filled_orders(Side::Buy);
 
-        assert_eq!(matcher.bids.len(), 0);
-        assert_eq!(matcher.asks.len(), 1);
-        assert_eq!(matcher.asks[0].price, dec!(10));
-        assert_eq!(matcher.asks[0].quantity, dec!(100));
+        let new_state = rt.block_on(ob.read());
+        assert_eq!(new_state.order_book.bids, vec![]);
+        assert_eq!(new_state.order_book.asks, vec![PricePair::new(dec!(10), dec!(100))]);
+        assert_eq!(matcher.bids, vec![]);
+        assert_eq!(matcher.asks, vec![
+            Order{
+                id: OrderId(1),
+                side: Side::Sell,
+                order_type: OrderType::Limit,
+                status: OrderStatus::Open,
+                price: dec!(10),
+                quantity: dec!(100),
+                filled: dec!(0)
+            }
+        ]);
+    }
+
+    #[test]
+    fn should_create_new_order_if_no_cross() {
+        let rt = tokio::runtime::Builder::new_multi_thread().build().unwrap();
+        let ob = Arc::new(RwLock::new(State::new()));
+        let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
+
+        let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(10), dec!(100));
+        matcher.process(&mut o);
+        matcher.remove_filled_orders(Side::Sell);
+
+        let mut o = Order::open(OrderId(2), Side::Sell, OrderType::Limit, dec!(11), dec!(100));
+        matcher.process(&mut o);
+        matcher.remove_filled_orders(Side::Buy);
+
+        let new_state = rt.block_on(ob.read());
+        assert_eq!(new_state.order_book.asks, vec![PricePair::new(dec!(11), dec!(100))]);
+        assert_eq!(new_state.order_book.bids, vec![PricePair::new(dec!(10), dec!(100))]);
+        assert_eq!(matcher.asks, vec![
+            Order{
+                id: OrderId(2),
+                side: Side::Sell,
+                order_type: OrderType::Limit,
+                status: OrderStatus::Open,
+                price: dec!(11),
+                quantity: dec!(100),
+                filled: dec!(0)
+            }
+        ]);
+        assert_eq!(matcher.bids, vec![
+            Order{
+                id: OrderId(1),
+                side: Side::Buy,
+                order_type: OrderType::Limit,
+                status: OrderStatus::Open,
+                price: dec!(10),
+                quantity: dec!(100),
+                filled: dec!(0)
+            }
+        ]);
     }
 
     #[test]
     fn should_create_ask_and_fill_it_with_another_order() {
         let rt = tokio::runtime::Builder::new_multi_thread().build().unwrap();
         let ob = Arc::new(RwLock::new(State::new()));
-        let mut matcher = Matcher::new(&rt, ob);
+        let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
 
         let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
         matcher.process(&mut o);
@@ -167,8 +229,11 @@ mod tests {
         matcher.process(&mut o);
         matcher.remove_filled_orders(Side::Buy);
 
-        assert_eq!(matcher.bids.len(), 0);
-        assert_eq!(matcher.asks.len(), 0);
+        let new_state = rt.block_on(ob.read());
+        assert_eq!(new_state.order_book.asks, vec![]);
+        assert_eq!(new_state.order_book.bids, vec![]);
+        assert_eq!(matcher.bids, vec![]);
+        assert_eq!(matcher.asks, vec![]);
     }
 
     #[test]
@@ -188,7 +253,6 @@ mod tests {
         let new_state = rt.block_on(ob.read());
         assert_eq!(new_state.order_book.asks, vec![]);
         assert_eq!(new_state.order_book.bids, vec![PricePair::new(dec!(10), dec!(45))]);
-
         assert_eq!(matcher.asks, vec![]);
         assert_eq!(matcher.bids, vec![
             Order{
@@ -220,7 +284,6 @@ mod tests {
         let new_state = rt.block_on(ob.read());
         assert_eq!(new_state.order_book.asks, vec![]);
         assert_eq!(new_state.order_book.bids, vec![]);
-
         assert_eq!(matcher.asks, vec![]);
         assert_eq!(matcher.bids, vec![]);
     }
