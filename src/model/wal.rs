@@ -1,6 +1,6 @@
-use std::fs::{File, OpenOptions, read_dir};
-use std::io::{BufWriter, Write, BufReader, BufRead};
-use std::path::{PathBuf};
+use std::fs::{read_dir, File, OpenOptions};
+use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 
@@ -9,22 +9,28 @@ use super::Order;
 #[derive(Debug)]
 pub struct WriteAheadLog {
     file: BufWriter<File>,
-    path: PathBuf
+    path: PathBuf,
 }
 
 impl WriteAheadLog {
     pub fn new(dir: &str) -> Result<Self> {
-        let path_dir: PathBuf  = dir.into();
+        let path_dir: PathBuf = dir.into();
         let path_file = path_dir.join("write_ahead_log.wal");
-        let file = OpenOptions::new().append(true).create(true).open(&path_file)?;
+        let file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&path_file)?;
         let file = BufWriter::new(file);
 
-        Ok(WriteAheadLog { file, path: path_dir})
+        Ok(WriteAheadLog {
+            file,
+            path: path_dir,
+        })
     }
 
     pub fn append_order(&mut self, order: &Order) -> Result<()> {
         // Serialization
-        let entry : String= match serde_json::to_string(order) {
+        let entry = match serde_json::to_string(order) {
             Ok(e) => e,
             Err(_) => bail!("Failed to parse"),
         };
@@ -36,7 +42,7 @@ impl WriteAheadLog {
         Ok(())
     }
 
-    fn get_files_path(&mut self ) -> Vec<PathBuf> {
+    fn get_files_path(&mut self) -> Vec<PathBuf> {
         let mut files = Vec::new();
         for file in read_dir(self.path.as_path()).unwrap() {
             let path = file.unwrap().path();
@@ -47,13 +53,17 @@ impl WriteAheadLog {
         files
     }
 
-
     pub fn read_file(&mut self) -> anyhow::Result<Vec<Order>> {
         let files = self.get_files_path();
-        if files.is_empty() { return Ok(Vec::new()); }
+        if files.is_empty() {
+            return Ok(Vec::new());
+        }
 
         let head = &files[0];
-        let file = OpenOptions::new().read(true).open(head).expect("Error reading the file");
+        let file = OpenOptions::new()
+            .read(true)
+            .open(head)
+            .expect("Error reading the file");
         let file = BufReader::new(file);
 
         let mut orders = Vec::new();
