@@ -1,7 +1,6 @@
-use std::fs::{File, OpenOptions, read_dir, remove_file};
+use std::fs::{File, OpenOptions, read_dir};
 use std::io::{BufWriter, Write, BufReader, BufRead};
 use std::path::{PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Result};
 
@@ -51,10 +50,10 @@ impl WriteAheadLog {
 
     pub fn read_file(&mut self) -> anyhow::Result<Vec<Order>> {
         let files = self.get_files_path();
-        if files.len() == 0 { return Ok(Vec::new()); }
+        if files.is_empty() { return Ok(Vec::new()); }
 
         let head = &files[0];
-        let file = OpenOptions::new().read(true).open(&head).expect("Error reading the file");
+        let file = OpenOptions::new().read(true).open(head).expect("Error reading the file");
         let file = BufReader::new(file);
 
         let mut orders = Vec::new();
@@ -67,18 +66,4 @@ impl WriteAheadLog {
 
         Ok(orders)
     }
-
-    pub fn delete_files(&mut self) {
-        let files = self.get_files_path();
-
-        for (i, file) in files.iter().enumerate() {
-            if i == files.len() -1 {
-                break;
-            }
-
-            remove_file(file);
-        }
-    }
-
-    // pub fn files_with_ext(&)
 }
