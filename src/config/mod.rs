@@ -2,7 +2,7 @@ use serde::Deserialize;
 use std::path::PathBuf;
 use std::thread;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct Config {
     #[serde(default = "default_host")]
     pub host: String,

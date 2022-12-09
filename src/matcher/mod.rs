@@ -106,13 +106,16 @@ impl Matcher {
             }
         }
 
-        if !order.is_filled() && order.order_type == OrderType::Limit {
+        if order.order_type == OrderType::Limit && !order.is_filled() {
             debug!("Placing order of {} at {}", order.unfilled(), order.price);
             state
                 .order_book
                 .place(order.side, order.price, order.unfilled());
             drop(state);
-            self.push_order(order.clone());
+
+            let mut new_order = order.clone();
+            new_order.quantity = order.unfilled();
+            self.push_order(new_order);
         }
     }
 
@@ -138,5 +141,149 @@ impl Matcher {
             Side::Buy => self.bids.push(order),
             Side::Sell => self.asks.push(order),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // use crate::model::{OrderStatus, PricePair};
+
+    use super::*;
+    use crate::model::{OrderStatus, PricePair};
+    use rust_decimal_macros::dec;
+
+    #[test]
+    fn should_create_new_bid() {
+        let rt = Arc::new(tokio::runtime::Builder::new_multi_thread().build().unwrap());
+        let ob = Arc::new(RwLock::new(State::new()));
+        let mut matcher = Matcher::new(Config::default(), rt.clone(), ob);
+
+        let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(10), dec!(100));
+        matcher.process(&mut o);
+
+        assert_eq!(matcher.asks.len(), 0);
+        assert_eq!(matcher.bids.len(), 1);
+        let bid = matcher.bids.peek().unwrap();
+        assert_eq!(bid.price, dec!(10));
+        assert_eq!(bid.quantity, dec!(100));
+    }
+
+    #[test]
+    fn should_create_new_ask() {
+        let rt = Arc::new(tokio::runtime::Builder::new_multi_thread().build().unwrap());
+        let ob = Arc::new(RwLock::new(State::new()));
+        let mut matcher = Matcher::new(Config::default(), rt.clone(), ob);
+
+        let mut o = Order::open(
+            OrderId(1),
+            Side::Sell,
+            OrderType::Limit,
+            dec!(10),
+            dec!(100),
+        );
+        matcher.process(&mut o);
+
+        assert_eq!(matcher.bids.len(), 0);
+        assert_eq!(matcher.asks.len(), 1);
+        let ask = matcher.asks.peek().unwrap();
+        assert_eq!(ask.price, dec!(10));
+        assert_eq!(ask.quantity, dec!(100));
+    }
+
+    #[test]
+    fn should_create_ask_and_fill_it_with_another_order() {
+        let rt = Arc::new(tokio::runtime::Builder::new_multi_thread().build().unwrap());
+        let ob = Arc::new(RwLock::new(State::new()));
+        let mut matcher = Matcher::new(Config::default(), rt.clone(), ob);
+
+        let mut o = Order::open(
+            OrderId(1),
+            Side::Sell,
+            OrderType::Limit,
+            dec!(10),
+            dec!(100),
+        );
+        matcher.process(&mut o);
+
+        let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(10), dec!(100));
+        matcher.process(&mut o);
+
+        assert_eq!(matcher.bids.len(), 0);
+        assert_eq!(matcher.asks.len(), 0);
+    }
+
+    #[test]
+    fn should_handle_partial_fill() {
+        let rt = Arc::new(tokio::runtime::Builder::new_multi_thread().build().unwrap());
+        let ob = Arc::new(RwLock::new(State::new()));
+        let mut matcher = Matcher::new(Config::default(), rt.clone(), Arc::clone(&ob));
+
+        let mut o = Order::open(
+            OrderId(1),
+            Side::Sell,
+            OrderType::Limit,
+            dec!(10),
+            dec!(100),
+        );
+        matcher.process(&mut o);
+
+        let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(10), dec!(145));
+        matcher.process(&mut o);
+
+        let new_state = rt.block_on(ob.read());
+        assert_eq!(new_state.order_book.asks, vec![]);
+        assert_eq!(
+            new_state.order_book.bids,
+            vec![PricePair::new(dec!(10), dec!(45))]
+        );
+
+        assert!(matcher.asks.is_empty());
+        assert!(!matcher.bids.is_empty());
+        let bid = matcher.bids.peek().unwrap().clone();
+        assert_eq!(
+            matcher.bids.into_vec(),
+            vec![Order {
+                id: OrderId(1),
+                side: Side::Buy,
+                order_type: OrderType::Limit,
+                status: OrderStatus::PartiallyFilled,
+                price: dec!(10),
+                quantity: dec!(45),
+                filled: dec!(100),
+                created_at: bid.created_at,
+            }],
+        );
+    }
+
+    #[test]
+    fn should_handle_market_order() {
+        let rt = Arc::new(tokio::runtime::Builder::new_multi_thread().build().unwrap());
+        let ob = Arc::new(RwLock::new(State::new()));
+        let mut matcher = Matcher::new(Config::default(), rt.clone(), Arc::clone(&ob));
+
+        let mut o = Order::open(
+            OrderId(1),
+            Side::Sell,
+            OrderType::Limit,
+            dec!(10),
+            dec!(100),
+        );
+        matcher.process(&mut o);
+
+        let mut o = Order::open(
+            OrderId(1),
+            Side::Buy,
+            OrderType::Market,
+            dec!(10),
+            dec!(145),
+        );
+        matcher.process(&mut o);
+
+        let new_state = rt.block_on(ob.read());
+        assert_eq!(new_state.order_book.asks, vec![]);
+        assert_eq!(new_state.order_book.bids, vec![]);
+
+        assert!(matcher.asks.is_empty());
+        assert!(matcher.bids.is_empty());
     }
 }
