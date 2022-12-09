@@ -4,7 +4,7 @@ services:
     ports:
       - 3000:3000
     environment:
-      RUST_LOG: debug
+      RUST_LOG: info
 
   prometheus:
     image: prom/prometheus:v2.40.4
