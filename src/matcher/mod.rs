@@ -1,3 +1,4 @@
+use anyhow::bail;
 use log::{debug, info};
 use std::collections::BinaryHeap;
 use std::ops::DerefMut;
@@ -16,6 +17,8 @@ pub fn matcher(
     let mut id = 0_u64;
     let mut matcher = Matcher::new(rt, ob);
 
+    matcher.restore_state().expect("Failed to restore state");
+
     info!("Matcher is listening for commands");
     while let Some(message) = rt.block_on(rx.recv()) {
         id += 1;
@@ -24,6 +27,9 @@ pub fn matcher(
 
         let mut order = Order::open(OrderId(id), message.side, message.price, message.quantity);
         matcher.process(&mut order);
+
+        matcher.save_command(&order);
+
         message.reply(order).unwrap();
     }
 
@@ -41,7 +47,7 @@ struct Matcher<'a> {
 
 impl<'a> Matcher<'a> {
     pub fn new(rt: &'a Runtime, state: Arc<RwLock<State>>) -> Self {
-        let wal = WriteAheadLog::new(&String::from("./")).expect("Expect wal to be initialized");
+        let mut wal = WriteAheadLog::new(&String::from("./log")).expect("Expect wal to be initialized");
 
         Self {
             rt,
@@ -52,10 +58,24 @@ impl<'a> Matcher<'a> {
         }
     }
 
+    pub fn restore_state(&mut self) -> anyhow::Result<()> {
+        let orders = self.wal.read_file()?;
+        for order in orders {
+            self.process(&mut order.clone());
+        }
+
+        self.wal.delete_files();
+
+        Ok(())
+    }
+
+    pub fn save_command(&mut self, order: &Order) {
+        self.wal.append_order(order).expect("Order not stored");
+    }
+
     pub fn process(&mut self, order: &mut Order) {
         let mut state = self.rt.block_on(self.state.write());
 
-        self.wal.append_order(order).expect("Order not stored");
 
         let opposite_orders = match order.side {
             Side::Buy => &mut self.asks,
