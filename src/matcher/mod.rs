@@ -6,7 +6,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
-use crate::model::{MessagePort, OpenOrder, Order, OrderId, Side, State, Trade};
+use crate::model::{MessagePort, OpenOrder, Order, OrderId, Side, State, Trade, WriteAheadLog};
 
 pub fn matcher(
     rt: &Runtime,
@@ -33,6 +33,7 @@ pub fn matcher(
 #[derive(Debug)]
 struct Matcher<'a> {
     rt: &'a Runtime,
+    wal: WriteAheadLog,
     state: Arc<RwLock<State>>,
     bids: BinaryHeap<Order>,
     asks: BinaryHeap<Order>,
@@ -40,8 +41,11 @@ struct Matcher<'a> {
 
 impl<'a> Matcher<'a> {
     pub fn new(rt: &'a Runtime, state: Arc<RwLock<State>>) -> Self {
+        let wal = WriteAheadLog::new(&String::from("./")).expect("Expect wal to be initialized");
+
         Self {
             rt,
+            wal,
             state,
             bids: BinaryHeap::new(),
             asks: BinaryHeap::new(),
@@ -50,6 +54,8 @@ impl<'a> Matcher<'a> {
 
     pub fn process(&mut self, order: &mut Order) {
         let mut state = self.rt.block_on(self.state.write());
+
+        self.wal.append_order(order).expect("Order not stored");
 
         let opposite_orders = match order.side {
             Side::Buy => &mut self.asks,
