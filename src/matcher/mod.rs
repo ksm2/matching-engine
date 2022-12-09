@@ -64,8 +64,6 @@ impl<'a> Matcher<'a> {
             self.process(&mut order.clone());
         }
 
-        self.wal.delete_files();
-
         Ok(())
     }
 

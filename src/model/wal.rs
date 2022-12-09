@@ -15,11 +15,8 @@ pub struct WriteAheadLog {
 
 impl WriteAheadLog {
     pub fn new(dir: &str) -> Result<Self> {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards");
         let path_dir: PathBuf  = dir.into();
-        let path_file = path_dir.join(timestamp.as_millis().to_string() + ".wal");
+        let path_file = path_dir.join("write_ahead_log.wal");
         let file = OpenOptions::new().append(true).create(true).open(&path_file)?;
         let file = BufWriter::new(file);
 
