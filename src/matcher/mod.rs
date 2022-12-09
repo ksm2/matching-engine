@@ -1,4 +1,3 @@
-use anyhow::bail;
 use log::{debug, info};
 use std::collections::BinaryHeap;
 use std::ops::DerefMut;
@@ -47,7 +46,7 @@ struct Matcher<'a> {
 
 impl<'a> Matcher<'a> {
     pub fn new(rt: &'a Runtime, state: Arc<RwLock<State>>) -> Self {
-        let mut wal = WriteAheadLog::new(&String::from("./log")).expect("Expect wal to be initialized");
+        let wal = WriteAheadLog::new(&String::from("./log")).expect("Expect wal to be initialized");
 
         Self {
             rt,
