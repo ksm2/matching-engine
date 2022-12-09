@@ -73,7 +73,6 @@ impl<'a> Matcher<'a> {
     pub fn process(&mut self, order: &mut Order) {
         let mut state = self.rt.block_on(self.state.write());
 
-
         let opposite_orders = match order.side {
             Side::Buy => &mut self.asks,
             Side::Sell => &mut self.bids,
