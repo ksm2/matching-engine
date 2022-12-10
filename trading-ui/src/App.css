@@ -1,0 +1,54 @@
+.App {
+  width: 100vw;
+  height: 100vh;
+  display: grid;
+  grid-template:
+      "top top" 3rem
+      "orderbook main" auto
+      "form form" 12rem
+      / 20rem auto;
+}
+
+.Top {
+  grid-area: top;
+  display: flex;
+  border-bottom: 1px solid black;
+}
+
+.Top div {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  border-right: 1px solid black;
+}
+
+.OrderBook {
+  grid-area: orderbook;
+  border-right: 1px solid black;
+  overflow-y: scroll;
+}
+
+.OrderBook table {
+  width: 100%;
+}
+
+.OrderBook td {
+  padding: 0 1rem;
+}
+
+.Form {
+  grid-area: form;
+  border-top: 1px solid black;
+  display: flex;
+  flex-flow: column nowrap;
+}
+
+.FormRow {
+  padding: 0.5rem;
+  display: flex;
+  flex-flow: row nowrap;
+}
+
+label {
+  min-width: 5rem;
+}

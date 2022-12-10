@@ -1,0 +1,25 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 600
+      arrivalRate: 10
+
+scenarios:
+  - name: "Buy"
+    flow:
+      - post:
+          url: "/orders"
+          json:
+            price: "{{$randomNumber(1,50)}}"
+            quantity: "{{$randomNumber(1,10000)}}"
+            side: "Buy"
+            order_type: "Limit"
+  - name: "Sell"
+    flow:
+      - post:
+          url: "/orders"
+          json:
+            price: "{{$randomNumber(1,50)}}"
+            quantity: "{{$randomNumber(1,10000)}}"
+            side: "Sell"
+            order_type: "Limit"

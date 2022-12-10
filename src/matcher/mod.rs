@@ -1,10 +1,12 @@
 use log::{debug, info};
+use std::collections::BinaryHeap;
+use std::ops::DerefMut;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
-use crate::model::{MessagePort, OpenOrder, Order, OrderId, OrderType, Side, State, Trade};
+use crate::model::{MessagePort, OpenOrder, Order, OrderId, OrderType, Side, State, Trade, WriteAheadLog};
 
 pub fn matcher(
     rt: &Runtime,
@@ -13,6 +15,8 @@ pub fn matcher(
 ) {
     let mut id = 0_u64;
     let mut matcher = Matcher::new(rt, ob);
+
+    matcher.restore_state().expect("Failed to restore state");
 
     info!("Matcher is listening for commands");
     while let Some(message) = rt.block_on(rx.recv()) {
@@ -28,7 +32,8 @@ pub fn matcher(
             message.quantity,
         );
         matcher.process(&mut order);
-        matcher.remove_filled_orders(order.side);
+
+        matcher.save_command(&order);
 
         message.reply(order).unwrap();
     }
@@ -39,19 +44,36 @@ pub fn matcher(
 #[derive(Debug)]
 struct Matcher<'a> {
     rt: &'a Runtime,
+    wal: WriteAheadLog,
     state: Arc<RwLock<State>>,
-    bids: Vec<Order>,
-    asks: Vec<Order>,
+    bids: BinaryHeap<Order>,
+    asks: BinaryHeap<Order>,
 }
 
 impl<'a> Matcher<'a> {
     pub fn new(rt: &'a Runtime, state: Arc<RwLock<State>>) -> Self {
+        let wal = WriteAheadLog::new(&String::from("./log")).expect("Expect wal to be initialized");
+
         Self {
             rt,
+            wal,
             state,
-            bids: Vec::new(),
-            asks: Vec::new(),
+            bids: BinaryHeap::new(),
+            asks: BinaryHeap::new(),
         }
+    }
+
+    pub fn restore_state(&mut self) -> anyhow::Result<()> {
+        let orders = self.wal.read_file()?;
+        for order in orders {
+            self.process(&mut order.clone());
+        }
+
+        Ok(())
+    }
+
+    pub fn save_command(&mut self, order: &Order) {
+        self.wal.append_order(order).expect("Order not stored");
     }
 
     pub fn process(&mut self, order: &mut Order) {
@@ -69,14 +91,24 @@ impl<'a> Matcher<'a> {
             Side::Sell => &mut self.bids,
         };
 
-        for other_order in opposite_orders.iter_mut() {
-            if !order.crosses(other_order) {
-                continue;
-            }
+        while !order.is_filled() {
+            let filled = {
+                let mut peek_other = match opposite_orders.peek_mut() {
+                    None => break,
+                    Some(o) => o,
+                };
+                let other = peek_other.deref_mut();
 
-            Matcher::execute_trade(&mut state, order, other_order);
-            if order.is_filled() {
-                return;
+                if !other.crosses(order) {
+                    break;
+                }
+
+                Matcher::execute_trade(&mut state, order, other);
+                other.is_filled()
+            };
+
+            if filled {
+                opposite_orders.pop();
             }
         }
 
@@ -101,10 +133,24 @@ impl<'a> Matcher<'a> {
             Side::Sell => &mut self.bids,
         };
 
-        for other_order in opposite_orders.iter_mut() {
-            Matcher::execute_trade(&mut state, order, other_order);
-            if order.is_filled() {
-                return;
+        while !order.is_filled() {
+            let filled = {
+                let mut peek_other = match opposite_orders.peek_mut() {
+                    None => break,
+                    Some(o) => o,
+                };
+                let other = peek_other.deref_mut();
+
+                if !other.crosses(order) {
+                    break;
+                }
+
+                Matcher::execute_trade(&mut state, order, other);
+                other.is_filled()
+            };
+
+            if filled {
+                opposite_orders.pop();
             }
         }
     }
@@ -119,7 +165,7 @@ impl<'a> Matcher<'a> {
         order.fill(used_qty);
         debug!("Filled bid at {}", other.price);
 
-        let trade = Trade::new(other.price, other.quantity, buy_order_id, sell_order_id);
+        let trade = Trade::new(other.price, used_qty, buy_order_id, sell_order_id);
         state.push_trade(trade);
 
         state.order_book.take(!order.side, other.price, used_qty);
@@ -131,14 +177,6 @@ impl<'a> Matcher<'a> {
             Side::Buy => self.bids.push(order),
             Side::Sell => self.asks.push(order),
         }
-    }
-
-    pub fn remove_filled_orders(&mut self, side: Side) {
-        let orders = match side {
-            Side::Buy => &mut self.asks,
-            Side::Sell => &mut self.bids,
-        };
-        orders.retain(|order| !order.is_filled());
     }
 }
 
@@ -157,13 +195,12 @@ mod tests {
 
         let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(10), dec!(100));
         matcher.process(&mut o);
-        matcher.remove_filled_orders(Side::Sell);
 
         let new_state = rt.block_on(ob.read());
         assert_eq!(new_state.order_book.asks, vec![]);
         assert_eq!(new_state.order_book.bids, vec![PricePair::new(dec!(10), dec!(100))]);
-        assert_eq!(matcher.asks, vec![]);
-        assert_eq!(matcher.bids, vec![
+        assert_eq!(matcher.asks.into_sorted_vec(), vec![]);
+        assert_eq!(matcher.bids.into_sorted_vec(), vec![
             Order{
                 id: OrderId(1),
                 side: Side::Buy,
@@ -171,7 +208,8 @@ mod tests {
                 status: OrderStatus::Open,
                 price: dec!(10),
                 quantity: dec!(100),
-                filled: dec!(0)
+                filled: dec!(0),
+                created_at: o.created_at
             }
         ]);
     }
@@ -184,13 +222,12 @@ mod tests {
 
         let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
         matcher.process(&mut o);
-        matcher.remove_filled_orders(Side::Buy);
 
         let new_state = rt.block_on(ob.read());
         assert_eq!(new_state.order_book.bids, vec![]);
         assert_eq!(new_state.order_book.asks, vec![PricePair::new(dec!(10), dec!(100))]);
-        assert_eq!(matcher.bids, vec![]);
-        assert_eq!(matcher.asks, vec![
+        assert_eq!(matcher.bids.into_sorted_vec(), vec![]);
+        assert_eq!(matcher.asks.into_sorted_vec(), vec![
             Order{
                 id: OrderId(1),
                 side: Side::Sell,
@@ -198,7 +235,8 @@ mod tests {
                 status: OrderStatus::Open,
                 price: dec!(10),
                 quantity: dec!(100),
-                filled: dec!(0)
+                filled: dec!(0),
+                created_at: o.created_at
             }
         ]);
     }
@@ -211,16 +249,14 @@ mod tests {
 
         let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(10), dec!(100));
         matcher.process(&mut o);
-        matcher.remove_filled_orders(Side::Sell);
 
         let mut o = Order::open(OrderId(2), Side::Sell, OrderType::Limit, dec!(11), dec!(100));
         matcher.process(&mut o);
-        matcher.remove_filled_orders(Side::Buy);
 
         let new_state = rt.block_on(ob.read());
         assert_eq!(new_state.order_book.asks, vec![PricePair::new(dec!(11), dec!(100))]);
         assert_eq!(new_state.order_book.bids, vec![PricePair::new(dec!(10), dec!(100))]);
-        assert_eq!(matcher.asks, vec![
+        assert_eq!(matcher.asks.into_sorted_vec(), vec![
             Order{
                 id: OrderId(2),
                 side: Side::Sell,
@@ -228,10 +264,12 @@ mod tests {
                 status: OrderStatus::Open,
                 price: dec!(11),
                 quantity: dec!(100),
-                filled: dec!(0)
+                filled: dec!(0),
+                created_at: o.created_at
             }
         ]);
-        assert_eq!(matcher.bids, vec![
+        let bids_vec = matcher.bids.into_sorted_vec();
+        assert_eq!(bids_vec, vec![
             Order{
                 id: OrderId(1),
                 side: Side::Buy,
@@ -239,7 +277,8 @@ mod tests {
                 status: OrderStatus::Open,
                 price: dec!(10),
                 quantity: dec!(100),
-                filled: dec!(0)
+                filled: dec!(0),
+                created_at: bids_vec[0].created_at
             }
         ]);
     }
@@ -252,17 +291,15 @@ mod tests {
 
         let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
         matcher.process(&mut o);
-        matcher.remove_filled_orders(Side::Sell);
 
         let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(10), dec!(100));
         matcher.process(&mut o);
-        matcher.remove_filled_orders(Side::Buy);
 
         let new_state = rt.block_on(ob.read());
         assert_eq!(new_state.order_book.asks, vec![]);
         assert_eq!(new_state.order_book.bids, vec![]);
-        assert_eq!(matcher.bids, vec![]);
-        assert_eq!(matcher.asks, vec![]);
+        assert_eq!(matcher.bids.into_sorted_vec(), vec![]);
+        assert_eq!(matcher.asks.into_sorted_vec(), vec![]);
     }
 
     #[test]
@@ -273,17 +310,15 @@ mod tests {
 
         let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
         matcher.process(&mut o);
-        matcher.remove_filled_orders(Side::Sell);
 
         let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(10), dec!(145));
         matcher.process(&mut o);
-        matcher.remove_filled_orders(Side::Buy);
 
         let new_state = rt.block_on(ob.read());
         assert_eq!(new_state.order_book.asks, vec![]);
         assert_eq!(new_state.order_book.bids, vec![PricePair::new(dec!(10), dec!(45))]);
-        assert_eq!(matcher.asks, vec![]);
-        assert_eq!(matcher.bids, vec![
+        assert_eq!(matcher.asks.into_sorted_vec(), vec![]);
+        assert_eq!(matcher.bids.into_sorted_vec(), vec![
             Order{
                 id: OrderId(1),
                 side: Side::Buy,
@@ -291,7 +326,8 @@ mod tests {
                 status: OrderStatus::PartiallyFilled,
                 price: dec!(10),
                 quantity: dec!(45),
-                filled: dec!(100)
+                filled: dec!(100),
+                created_at: o.created_at
             }
         ]);
     }
@@ -304,17 +340,15 @@ mod tests {
 
         let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
         matcher.process(&mut o);
-        matcher.remove_filled_orders(Side::Sell);
 
         let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Market, dec!(10), dec!(100));
         matcher.process(&mut o);
-        matcher.remove_filled_orders(Side::Buy);
 
         let new_state = rt.block_on(ob.read());
         assert_eq!(new_state.order_book.asks, vec![]);
         assert_eq!(new_state.order_book.bids, vec![]);
-        assert_eq!(matcher.asks, vec![]);
-        assert_eq!(matcher.bids, vec![]);
+        assert_eq!(matcher.asks.into_sorted_vec(), vec![]);
+        assert_eq!(matcher.bids.into_sorted_vec(), vec![]);
     }
 
     #[test]
@@ -325,17 +359,15 @@ mod tests {
 
         let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
         matcher.process(&mut o);
-        matcher.remove_filled_orders(Side::Sell);
 
         let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Market, dec!(10), dec!(145));
         matcher.process(&mut o);
-        matcher.remove_filled_orders(Side::Buy);
 
         let new_state = rt.block_on(ob.read());
         assert_eq!(new_state.order_book.asks, vec![]);
         assert_eq!(new_state.order_book.bids, vec![]);
-        assert_eq!(matcher.asks, vec![]);
-        assert_eq!(matcher.bids, vec![]);
+        assert_eq!(matcher.asks.into_sorted_vec(), vec![]);
+        assert_eq!(matcher.bids.into_sorted_vec(), vec![]);
     }
 
     #[test]
@@ -346,25 +378,25 @@ mod tests {
 
         let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
         matcher.process(&mut o);
-        matcher.remove_filled_orders(Side::Sell);
 
         let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Market, dec!(10), dec!(45));
         matcher.process(&mut o);
-        matcher.remove_filled_orders(Side::Buy);
 
         let new_state = rt.block_on(ob.read());
         assert_eq!(new_state.order_book.asks, vec![PricePair::new(dec!(10), dec!(55))]);
         assert_eq!(new_state.order_book.bids, vec![]);
-        assert_eq!(matcher.asks, vec![Order{
+        let bids_vec = matcher.asks.into_sorted_vec();
+        assert_eq!(bids_vec, vec![Order{
             id: OrderId(1),
             side: Side::Sell,
             order_type: OrderType::Limit,
             status: OrderStatus::PartiallyFilled,
             price: dec!(10),
             quantity: dec!(100),
-            filled: dec!(45)
+            filled: dec!(45),
+            created_at: bids_vec[0].created_at
         }]);
-        assert_eq!(matcher.bids, vec![]);
+        assert_eq!(matcher.bids.into_sorted_vec(), vec![]);
     }
 
 }

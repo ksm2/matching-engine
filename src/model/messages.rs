@@ -24,7 +24,7 @@ where
     pub async fn send_to(
         self,
         target: &mpsc::Sender<MessagePort<Req, Res>>,
-    ) -> Result<Res, anyhow::Error> {
+    ) -> anyhow::Result<Res> {
         target.send(self.port).await?;
         let response = self.receiver.await?;
         Ok(response)
