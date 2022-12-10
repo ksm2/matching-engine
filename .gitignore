@@ -7,6 +7,4 @@
 
 # Application
 .env
-
-log
-
+*.wal

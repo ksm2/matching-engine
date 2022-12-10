@@ -57,10 +57,10 @@ fn main() -> Result<()> {
 
     // Spawn async API threads
     let context = api::Context::new(registry, order_sender, state.clone())?;
-    let handle = rt.spawn(api::api(config, context));
+    let handle = rt.spawn(api::api(config.clone(), context));
 
     // Run the matcher
-    matcher::matcher(rt.clone(), order_receiver, state);
+    matcher::matcher(config, rt.clone(), order_receiver, state);
     rt.block_on(handle)?;
 
     info!("Matching engine stopped");

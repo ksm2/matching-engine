@@ -1,6 +1,6 @@
 use std::fs::{read_dir, File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
 
@@ -13,8 +13,7 @@ pub struct WriteAheadLog {
 }
 
 impl WriteAheadLog {
-    pub fn new(dir: &str) -> Result<Self> {
-        let path_dir: PathBuf = dir.into();
+    pub fn new(path_dir: &Path) -> Result<Self> {
         let path_file = path_dir.join("write_ahead_log.wal");
         let file = OpenOptions::new()
             .append(true)
@@ -24,7 +23,7 @@ impl WriteAheadLog {
 
         Ok(WriteAheadLog {
             file,
-            path: path_dir,
+            path: path_dir.into(),
         })
     }
 
