@@ -163,10 +163,22 @@ mod tests {
 
     #[test]
     fn should_compare_two_asks_with_different_creation_time() {
-        let o1 = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(12), dec!(600));
+        let o1 = Order::open(
+            OrderId(1),
+            Side::Sell,
+            OrderType::Limit,
+            dec!(12),
+            dec!(600),
+        );
         let one_ms = time::Duration::from_millis(1);
         thread::sleep(one_ms);
-        let o2 = Order::open(OrderId(2), Side::Sell, OrderType::Limit, dec!(12), dec!(600));
+        let o2 = Order::open(
+            OrderId(2),
+            Side::Sell,
+            OrderType::Limit,
+            dec!(12),
+            dec!(600),
+        );
 
         assert!(o1.lt(&o2));
         assert!(o2.gt(&o1));

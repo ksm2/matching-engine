@@ -6,7 +6,9 @@ use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
-use crate::model::{MessagePort, OpenOrder, Order, OrderId, OrderType, Side, State, Trade, WriteAheadLog};
+use crate::model::{
+    MessagePort, OpenOrder, Order, OrderId, OrderType, Side, State, Trade, WriteAheadLog,
+};
 
 pub fn matcher(
     rt: &Runtime,
@@ -182,7 +184,7 @@ impl<'a> Matcher<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::{PricePair, OrderStatus};
+    use crate::model::{OrderStatus, PricePair};
 
     use super::*;
     use rust_decimal_macros::dec;
@@ -198,10 +200,14 @@ mod tests {
 
         let new_state = rt.block_on(ob.read());
         assert_eq!(new_state.order_book.asks, vec![]);
-        assert_eq!(new_state.order_book.bids, vec![PricePair::new(dec!(10), dec!(100))]);
+        assert_eq!(
+            new_state.order_book.bids,
+            vec![PricePair::new(dec!(10), dec!(100))]
+        );
         assert_eq!(matcher.asks.into_sorted_vec(), vec![]);
-        assert_eq!(matcher.bids.into_sorted_vec(), vec![
-            Order{
+        assert_eq!(
+            matcher.bids.into_sorted_vec(),
+            vec![Order {
                 id: OrderId(1),
                 side: Side::Buy,
                 order_type: OrderType::Limit,
@@ -210,8 +216,8 @@ mod tests {
                 quantity: dec!(100),
                 filled: dec!(0),
                 created_at: o.created_at
-            }
-        ]);
+            }]
+        );
     }
 
     #[test]
@@ -220,15 +226,25 @@ mod tests {
         let ob = Arc::new(RwLock::new(State::new()));
         let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
 
-        let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
+        let mut o = Order::open(
+            OrderId(1),
+            Side::Sell,
+            OrderType::Limit,
+            dec!(10),
+            dec!(100),
+        );
         matcher.process(&mut o);
 
         let new_state = rt.block_on(ob.read());
         assert_eq!(new_state.order_book.bids, vec![]);
-        assert_eq!(new_state.order_book.asks, vec![PricePair::new(dec!(10), dec!(100))]);
+        assert_eq!(
+            new_state.order_book.asks,
+            vec![PricePair::new(dec!(10), dec!(100))]
+        );
         assert_eq!(matcher.bids.into_sorted_vec(), vec![]);
-        assert_eq!(matcher.asks.into_sorted_vec(), vec![
-            Order{
+        assert_eq!(
+            matcher.asks.into_sorted_vec(),
+            vec![Order {
                 id: OrderId(1),
                 side: Side::Sell,
                 order_type: OrderType::Limit,
@@ -237,8 +253,8 @@ mod tests {
                 quantity: dec!(100),
                 filled: dec!(0),
                 created_at: o.created_at
-            }
-        ]);
+            }]
+        );
     }
 
     #[test]
@@ -250,14 +266,27 @@ mod tests {
         let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(10), dec!(100));
         matcher.process(&mut o);
 
-        let mut o = Order::open(OrderId(2), Side::Sell, OrderType::Limit, dec!(11), dec!(100));
+        let mut o = Order::open(
+            OrderId(2),
+            Side::Sell,
+            OrderType::Limit,
+            dec!(11),
+            dec!(100),
+        );
         matcher.process(&mut o);
 
         let new_state = rt.block_on(ob.read());
-        assert_eq!(new_state.order_book.asks, vec![PricePair::new(dec!(11), dec!(100))]);
-        assert_eq!(new_state.order_book.bids, vec![PricePair::new(dec!(10), dec!(100))]);
-        assert_eq!(matcher.asks.into_sorted_vec(), vec![
-            Order{
+        assert_eq!(
+            new_state.order_book.asks,
+            vec![PricePair::new(dec!(11), dec!(100))]
+        );
+        assert_eq!(
+            new_state.order_book.bids,
+            vec![PricePair::new(dec!(10), dec!(100))]
+        );
+        assert_eq!(
+            matcher.asks.into_sorted_vec(),
+            vec![Order {
                 id: OrderId(2),
                 side: Side::Sell,
                 order_type: OrderType::Limit,
@@ -266,11 +295,12 @@ mod tests {
                 quantity: dec!(100),
                 filled: dec!(0),
                 created_at: o.created_at
-            }
-        ]);
+            }]
+        );
         let bids_vec = matcher.bids.into_sorted_vec();
-        assert_eq!(bids_vec, vec![
-            Order{
+        assert_eq!(
+            bids_vec,
+            vec![Order {
                 id: OrderId(1),
                 side: Side::Buy,
                 order_type: OrderType::Limit,
@@ -279,8 +309,8 @@ mod tests {
                 quantity: dec!(100),
                 filled: dec!(0),
                 created_at: bids_vec[0].created_at
-            }
-        ]);
+            }]
+        );
     }
 
     #[test]
@@ -289,7 +319,13 @@ mod tests {
         let ob = Arc::new(RwLock::new(State::new()));
         let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
 
-        let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
+        let mut o = Order::open(
+            OrderId(1),
+            Side::Sell,
+            OrderType::Limit,
+            dec!(10),
+            dec!(100),
+        );
         matcher.process(&mut o);
 
         let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(10), dec!(100));
@@ -308,7 +344,13 @@ mod tests {
         let ob = Arc::new(RwLock::new(State::new()));
         let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
 
-        let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
+        let mut o = Order::open(
+            OrderId(1),
+            Side::Sell,
+            OrderType::Limit,
+            dec!(10),
+            dec!(100),
+        );
         matcher.process(&mut o);
 
         let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(10), dec!(145));
@@ -316,10 +358,14 @@ mod tests {
 
         let new_state = rt.block_on(ob.read());
         assert_eq!(new_state.order_book.asks, vec![]);
-        assert_eq!(new_state.order_book.bids, vec![PricePair::new(dec!(10), dec!(45))]);
+        assert_eq!(
+            new_state.order_book.bids,
+            vec![PricePair::new(dec!(10), dec!(45))]
+        );
         assert_eq!(matcher.asks.into_sorted_vec(), vec![]);
-        assert_eq!(matcher.bids.into_sorted_vec(), vec![
-            Order{
+        assert_eq!(
+            matcher.bids.into_sorted_vec(),
+            vec![Order {
                 id: OrderId(1),
                 side: Side::Buy,
                 order_type: OrderType::Limit,
@@ -328,8 +374,8 @@ mod tests {
                 quantity: dec!(45),
                 filled: dec!(100),
                 created_at: o.created_at
-            }
-        ]);
+            }]
+        );
     }
 
     #[test]
@@ -338,10 +384,22 @@ mod tests {
         let ob = Arc::new(RwLock::new(State::new()));
         let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
 
-        let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
+        let mut o = Order::open(
+            OrderId(1),
+            Side::Sell,
+            OrderType::Limit,
+            dec!(10),
+            dec!(100),
+        );
         matcher.process(&mut o);
 
-        let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Market, dec!(10), dec!(100));
+        let mut o = Order::open(
+            OrderId(1),
+            Side::Buy,
+            OrderType::Market,
+            dec!(10),
+            dec!(100),
+        );
         matcher.process(&mut o);
 
         let new_state = rt.block_on(ob.read());
@@ -357,10 +415,22 @@ mod tests {
         let ob = Arc::new(RwLock::new(State::new()));
         let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
 
-        let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
+        let mut o = Order::open(
+            OrderId(1),
+            Side::Sell,
+            OrderType::Limit,
+            dec!(10),
+            dec!(100),
+        );
         matcher.process(&mut o);
 
-        let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Market, dec!(10), dec!(145));
+        let mut o = Order::open(
+            OrderId(1),
+            Side::Buy,
+            OrderType::Market,
+            dec!(10),
+            dec!(145),
+        );
         matcher.process(&mut o);
 
         let new_state = rt.block_on(ob.read());
@@ -376,27 +446,38 @@ mod tests {
         let ob = Arc::new(RwLock::new(State::new()));
         let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
 
-        let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
+        let mut o = Order::open(
+            OrderId(1),
+            Side::Sell,
+            OrderType::Limit,
+            dec!(10),
+            dec!(100),
+        );
         matcher.process(&mut o);
 
         let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Market, dec!(10), dec!(45));
         matcher.process(&mut o);
 
         let new_state = rt.block_on(ob.read());
-        assert_eq!(new_state.order_book.asks, vec![PricePair::new(dec!(10), dec!(55))]);
+        assert_eq!(
+            new_state.order_book.asks,
+            vec![PricePair::new(dec!(10), dec!(55))]
+        );
         assert_eq!(new_state.order_book.bids, vec![]);
         let bids_vec = matcher.asks.into_sorted_vec();
-        assert_eq!(bids_vec, vec![Order{
-            id: OrderId(1),
-            side: Side::Sell,
-            order_type: OrderType::Limit,
-            status: OrderStatus::PartiallyFilled,
-            price: dec!(10),
-            quantity: dec!(100),
-            filled: dec!(45),
-            created_at: bids_vec[0].created_at
-        }]);
+        assert_eq!(
+            bids_vec,
+            vec![Order {
+                id: OrderId(1),
+                side: Side::Sell,
+                order_type: OrderType::Limit,
+                status: OrderStatus::PartiallyFilled,
+                price: dec!(10),
+                quantity: dec!(100),
+                filled: dec!(45),
+                created_at: bids_vec[0].created_at
+            }]
+        );
         assert_eq!(matcher.bids.into_sorted_vec(), vec![]);
     }
-
 }
