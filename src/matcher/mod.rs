@@ -150,7 +150,7 @@ mod tests {
     use rust_decimal_macros::dec;
 
     #[test]
-    fn should_create_new_bid() {
+    fn should_create_new_bid_on_limit_order() {
         let rt = tokio::runtime::Builder::new_multi_thread().build().unwrap();
         let ob = Arc::new(RwLock::new(State::new()));
         let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
@@ -177,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn should_create_new_ask() {
+    fn should_create_new_ask_on_limit_order() {
         let rt = tokio::runtime::Builder::new_multi_thread().build().unwrap();
         let ob = Arc::new(RwLock::new(State::new()));
         let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
@@ -266,7 +266,7 @@ mod tests {
     }
 
     #[test]
-    fn should_handle_partial_fill() {
+    fn should_handle_limit_order_partial_fill() {
         let rt = tokio::runtime::Builder::new_multi_thread().build().unwrap();
         let ob = Arc::new(RwLock::new(State::new()));
         let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
@@ -306,6 +306,27 @@ mod tests {
         matcher.process(&mut o);
         matcher.remove_filled_orders(Side::Sell);
 
+        let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Market, dec!(10), dec!(100));
+        matcher.process(&mut o);
+        matcher.remove_filled_orders(Side::Buy);
+
+        let new_state = rt.block_on(ob.read());
+        assert_eq!(new_state.order_book.asks, vec![]);
+        assert_eq!(new_state.order_book.bids, vec![]);
+        assert_eq!(matcher.asks, vec![]);
+        assert_eq!(matcher.bids, vec![]);
+    }
+
+    #[test]
+    fn should_handle_partial_market_order_higher_available_liquidity() {
+        let rt = tokio::runtime::Builder::new_multi_thread().build().unwrap();
+        let ob = Arc::new(RwLock::new(State::new()));
+        let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
+
+        let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
+        matcher.process(&mut o);
+        matcher.remove_filled_orders(Side::Sell);
+
         let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Market, dec!(10), dec!(145));
         matcher.process(&mut o);
         matcher.remove_filled_orders(Side::Buy);
@@ -314,6 +335,35 @@ mod tests {
         assert_eq!(new_state.order_book.asks, vec![]);
         assert_eq!(new_state.order_book.bids, vec![]);
         assert_eq!(matcher.asks, vec![]);
+        assert_eq!(matcher.bids, vec![]);
+    }
+
+    #[test]
+    fn should_handle_market_order_when_enough_liquidity() {
+        let rt = tokio::runtime::Builder::new_multi_thread().build().unwrap();
+        let ob = Arc::new(RwLock::new(State::new()));
+        let mut matcher = Matcher::new(&rt, Arc::clone(&ob));
+
+        let mut o = Order::open(OrderId(1), Side::Sell, OrderType::Limit, dec!(10), dec!(100));
+        matcher.process(&mut o);
+        matcher.remove_filled_orders(Side::Sell);
+
+        let mut o = Order::open(OrderId(1), Side::Buy, OrderType::Market, dec!(10), dec!(45));
+        matcher.process(&mut o);
+        matcher.remove_filled_orders(Side::Buy);
+
+        let new_state = rt.block_on(ob.read());
+        assert_eq!(new_state.order_book.asks, vec![PricePair::new(dec!(10), dec!(55))]);
+        assert_eq!(new_state.order_book.bids, vec![]);
+        assert_eq!(matcher.asks, vec![Order{
+            id: OrderId(1),
+            side: Side::Sell,
+            order_type: OrderType::Limit,
+            status: OrderStatus::PartiallyFilled,
+            price: dec!(10),
+            quantity: dec!(100),
+            filled: dec!(45)
+        }]);
         assert_eq!(matcher.bids, vec![]);
     }
 
