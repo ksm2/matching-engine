@@ -55,6 +55,13 @@ impl<'a> Matcher<'a> {
     }
 
     pub fn process(&mut self, order: &mut Order) {
+        match order.order_type {
+            OrderType::Limit => self.process_limit_order(order),
+            OrderType::Market => self.process_market_order(order),
+        }
+    }
+
+    fn process_limit_order(&mut self, order: &mut Order) {
         let mut state = self.rt.block_on(self.state.write());
 
         let opposite_orders = match order.side {
@@ -63,7 +70,7 @@ impl<'a> Matcher<'a> {
         };
 
         for other_order in opposite_orders.iter_mut() {
-            if order.order_type == OrderType::Limit && !order.crosses(other_order) {
+            if !order.crosses(other_order) {
                 continue;
             }
 
@@ -73,7 +80,7 @@ impl<'a> Matcher<'a> {
             }
         }
 
-        if order.order_type == OrderType::Limit && !order.is_filled() {
+        if !order.is_filled() {
             debug!("Placing order of {} at {}", order.unfilled(), order.price);
             state
                 .order_book
@@ -83,6 +90,22 @@ impl<'a> Matcher<'a> {
             let mut new_order = order.clone();
             new_order.quantity = order.unfilled();
             self.push_order(new_order);
+        }
+    }
+
+    fn process_market_order(&mut self, order: &mut Order) {
+        let mut state = self.rt.block_on(self.state.write());
+
+        let opposite_orders = match order.side {
+            Side::Buy => &mut self.asks,
+            Side::Sell => &mut self.bids,
+        };
+
+        for other_order in opposite_orders.iter_mut() {
+            Matcher::execute_trade(&mut state, order, other_order);
+            if order.is_filled() {
+                return;
+            }
         }
     }
 
