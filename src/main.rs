@@ -43,6 +43,7 @@ fn main() -> Result<()> {
         .enable_all()
         .worker_threads(config.api_threads)
         .build()?;
+    let rt = Arc::new(rt);
     info!("Starting {} API threads", config.api_threads);
 
     // Initialize matching engine state:
@@ -59,7 +60,7 @@ fn main() -> Result<()> {
     let handle = rt.spawn(api::api(config, context));
 
     // Run the matcher
-    matcher::matcher(&rt, order_receiver, state);
+    matcher::matcher(rt.clone(), order_receiver, state);
     rt.block_on(handle)?;
 
     info!("Matching engine stopped");

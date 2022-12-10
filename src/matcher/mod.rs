@@ -9,12 +9,12 @@ use tokio::sync::{RwLock, RwLockWriteGuard};
 use crate::model::{MessagePort, OpenOrder, Order, OrderId, Side, State, Trade, WriteAheadLog};
 
 pub fn matcher(
-    rt: &Runtime,
+    rt: Arc<Runtime>,
     mut rx: Receiver<MessagePort<OpenOrder, Order>>,
     ob: Arc<RwLock<State>>,
 ) {
     let mut id = 0_u64;
-    let mut matcher = Matcher::new(rt, ob);
+    let mut matcher = Matcher::new(rt.clone(), ob);
 
     matcher.restore_state().expect("Failed to restore state");
 
@@ -36,16 +36,16 @@ pub fn matcher(
 }
 
 #[derive(Debug)]
-struct Matcher<'a> {
-    rt: &'a Runtime,
+struct Matcher {
+    rt: Arc<Runtime>,
     wal: WriteAheadLog,
     state: Arc<RwLock<State>>,
     bids: BinaryHeap<Order>,
     asks: BinaryHeap<Order>,
 }
 
-impl<'a> Matcher<'a> {
-    pub fn new(rt: &'a Runtime, state: Arc<RwLock<State>>) -> Self {
+impl Matcher {
+    pub fn new(rt: Arc<Runtime>, state: Arc<RwLock<State>>) -> Self {
         let wal = WriteAheadLog::new(&String::from("./log")).expect("Expect wal to be initialized");
 
         Self {
