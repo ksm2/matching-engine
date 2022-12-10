@@ -1,4 +1,4 @@
-use std::fs::{read_dir, File, OpenOptions};
+use std::fs::{create_dir_all, read_dir, File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
@@ -15,6 +15,7 @@ pub struct WriteAheadLog {
 impl WriteAheadLog {
     pub fn new(path_dir: &Path) -> Result<Self> {
         let path_file = path_dir.join("write_ahead_log.wal");
+        create_dir_all(path_dir)?;
         let file = OpenOptions::new()
             .append(true)
             .create(true)
