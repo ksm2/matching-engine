@@ -18,7 +18,7 @@ pub fn matcher(
     let mut id = 0_u64;
     let mut matcher = Matcher::new(config, rt.clone(), ob);
 
-    matcher.restore_state().expect("Failed to restore state");
+    matcher.restore_state();
 
     info!("Matcher is listening for commands");
     while let Some(message) = rt.block_on(rx.recv()) {
@@ -27,9 +27,8 @@ pub fn matcher(
         debug!("Processing {:?}", message.req);
 
         let mut order = Order::open(OrderId(id), message.side, message.price, message.quantity);
-        matcher.process(&mut order);
-
         matcher.save_command(&order);
+        matcher.process(&mut order);
 
         message.reply(order).unwrap();
     }
@@ -59,13 +58,11 @@ impl Matcher {
         }
     }
 
-    pub fn restore_state(&mut self) -> anyhow::Result<()> {
-        let orders = self.wal.read_file()?;
-        for order in orders {
-            self.process(&mut order.clone());
+    pub fn restore_state(&mut self) {
+        let orders = self.wal.read_orders();
+        for mut order in orders {
+            self.process(&mut order);
         }
-
-        Ok(())
     }
 
     pub fn save_command(&mut self, order: &Order) {

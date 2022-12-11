@@ -2,7 +2,8 @@ use std::fs::{create_dir_all, read_dir, File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
+use log::warn;
 
 use super::Order;
 
@@ -30,10 +31,7 @@ impl WriteAheadLog {
 
     pub fn append_order(&mut self, order: &Order) -> Result<()> {
         // Serialization
-        let entry = match serde_json::to_string(order) {
-            Ok(e) => e,
-            Err(_) => bail!("Failed to parse"),
-        };
+        let entry = serde_json::to_string(order)?;
 
         // Write on file
         writeln!(self.file, "{}", entry)?;
@@ -42,38 +40,59 @@ impl WriteAheadLog {
         Ok(())
     }
 
-    fn get_files_path(&mut self) -> Vec<PathBuf> {
-        let mut files = Vec::new();
-        for file in read_dir(self.path.as_path()).unwrap() {
-            let path = file.unwrap().path();
-            files.push(path);
+    pub fn read_orders(&mut self) -> Vec<Order> {
+        let files = self.get_files_path();
+        if files.is_empty() {
+            return Vec::new();
         }
+
+        files
+            .into_iter()
+            .filter_map(|file| Self::read_log_file(&file).ok())
+            .flatten()
+            .collect()
+    }
+
+    fn get_files_path(&mut self) -> Vec<PathBuf> {
+        let mut files: Vec<_> = read_dir(&self.path)
+            .into_iter()
+            .flatten()
+            .filter_map(|file| {
+                file.map_err(|err| warn!("Failed to read WAL: {}", err))
+                    .ok()
+            })
+            .map(|file| file.path())
+            .collect();
 
         files.sort();
         files
     }
 
-    pub fn read_file(&mut self) -> anyhow::Result<Vec<Order>> {
-        let files = self.get_files_path();
-        if files.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let head = &files[0];
-        let file = OpenOptions::new()
-            .read(true)
-            .open(head)
-            .expect("Error reading the file");
+    fn read_log_file(path: &Path) -> Result<Vec<Order>> {
+        let file = OpenOptions::new().read(true).open(path)?;
         let file = BufReader::new(file);
 
-        let mut orders = Vec::new();
+        Ok(file
+            .lines()
+            .enumerate()
+            .filter_map(|(index, line)| {
+                line.map_err(anyhow::Error::from)
+                    .and_then(|json| Self::parse_order(&json))
+                    .map_err(|err| {
+                        warn!(
+                            "Failed to read line {} from WAL {}: {}",
+                            index + 1,
+                            path.to_string_lossy(),
+                            err
+                        )
+                    })
+                    .ok()
+            })
+            .collect())
+    }
 
-        for line in file.lines() {
-            let json = line?;
-            let order: Order = serde_json::from_str(&json)?;
-            orders.push(order);
-        }
-
-        Ok(orders)
+    fn parse_order(json: &str) -> Result<Order> {
+        let order = serde_json::from_str(json)?;
+        Ok(order)
     }
 }
