@@ -21,6 +21,7 @@ pub enum OrderStatus {
 pub struct Order {
     pub id: OrderId,
     pub side: Side,
+    #[serde(default)]
     pub order_type: OrderType,
     pub status: OrderStatus,
     pub price: Decimal,
