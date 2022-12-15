@@ -1,6 +1,7 @@
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+use std::ops::Add;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::model::side::Side;
@@ -9,6 +10,14 @@ use super::OrderType;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrderId(pub u64);
+
+impl Add<u64> for OrderId {
+    type Output = OrderId;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrderStatus {
@@ -31,6 +40,16 @@ pub struct Order {
 }
 
 impl Order {
+    #[cfg(test)]
+    pub fn open_market(id: OrderId, side: Side, qty: Decimal) -> Self {
+        Self::open(id, side, OrderType::Market, Decimal::ZERO, qty)
+    }
+
+    #[cfg(test)]
+    pub fn open_limit(id: OrderId, side: Side, price: Decimal, qty: Decimal) -> Self {
+        Self::open(id, side, OrderType::Limit, price, qty)
+    }
+
     pub fn open(
         id: OrderId,
         side: Side,
@@ -56,6 +75,18 @@ impl Order {
 
     pub fn unfilled(&self) -> Decimal {
         self.quantity - self.filled
+    }
+
+    pub fn can_be_filled_by(&self, other: &Self) -> bool {
+        if self.side == other.side {
+            return false;
+        }
+
+        if self.order_type == OrderType::Market {
+            return other.order_type != OrderType::Market;
+        }
+
+        self.crosses(other)
     }
 
     pub fn crosses(&self, other: &Self) -> bool {
@@ -183,6 +214,46 @@ mod tests {
 
         assert!(o1.lt(&o2));
         assert!(o2.gt(&o1));
+    }
+
+    #[test]
+    fn should_fill_a_market_order_of_opposite_side() {
+        let id1 = OrderId(1);
+        let o1 = Order::open_market(id1, Side::Sell, dec!(600));
+        let id2 = id1 + 1;
+        let o2 = Order::open_limit(id2, Side::Buy, dec!(12), dec!(600));
+
+        assert!(o1.can_be_filled_by(&o2));
+    }
+
+    #[test]
+    fn should_not_fill_a_market_order_of_same_side() {
+        let id1 = OrderId(1);
+        let o1 = Order::open_market(id1, Side::Sell, dec!(600));
+        let id2 = id1 + 1;
+        let o2 = Order::open_limit(id2, Side::Sell, dec!(12), dec!(600));
+
+        assert!(!o1.can_be_filled_by(&o2));
+    }
+
+    #[test]
+    fn should_not_fill_a_market_order_against_another_market_order() {
+        let id1 = OrderId(1);
+        let o1 = Order::open_market(id1, Side::Sell, dec!(600));
+        let id2 = id1 + 1;
+        let o2 = Order::open_market(id2, Side::Buy, dec!(600));
+
+        assert!(!o1.can_be_filled_by(&o2));
+    }
+
+    #[test]
+    fn should_fill_a_limit_order_of_opposite_side() {
+        let id1 = OrderId(1);
+        let o1 = Order::open_limit(id1, Side::Sell, dec!(11), dec!(600));
+        let id2 = id1 + 1;
+        let o2 = Order::open_limit(id2, Side::Buy, dec!(12), dec!(600));
+
+        assert!(o1.can_be_filled_by(&o2));
     }
 
     #[test]
