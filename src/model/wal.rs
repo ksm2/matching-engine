@@ -20,7 +20,7 @@ impl WriteAheadLog {
         let file = OpenOptions::new()
             .append(true)
             .create(true)
-            .open(&path_file)?;
+            .open(path_file)?;
         let file = BufWriter::new(file);
 
         Ok(WriteAheadLog {
