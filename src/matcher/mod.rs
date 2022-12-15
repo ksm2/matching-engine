@@ -9,71 +9,73 @@ use crate::model::{
     Market, MessagePort, OpenOrder, Order, OrderId, OrderType, State, Trade, WriteAheadLog,
 };
 
-pub fn matcher(
-    config: Config,
-    rt: Arc<Runtime>,
-    mut rx: Receiver<MessagePort<OpenOrder, Order>>,
-    ob: Arc<RwLock<State>>,
-) {
-    let mut id = 0_u64;
-    let mut matcher = Matcher::new(config, rt.clone(), ob);
-
-    matcher.restore_state();
-
-    info!("Matcher is listening for commands");
-    while let Some(message) = rt.block_on(rx.recv()) {
-        id += 1;
-
-        debug!("Processing {:?}", message.req);
-
-        let mut order = Order::open(
-            OrderId(id),
-            message.side,
-            message.order_type,
-            message.price,
-            message.quantity,
-        );
-        matcher.save_command(&order);
-        matcher.process(&mut order);
-
-        message.reply(order).unwrap();
-    }
-
-    info!("Matcher stopped listening for commands");
-}
-
 #[derive(Debug)]
-struct Matcher {
+pub struct Matcher {
     rt: Arc<Runtime>,
-    wal: WriteAheadLog,
+    rx: Receiver<MessagePort<OpenOrder, Order>>,
     state: Arc<RwLock<State>>,
+    wal: WriteAheadLog,
     market: Market,
 }
 
 impl Matcher {
-    pub fn new(config: Config, rt: Arc<Runtime>, state: Arc<RwLock<State>>) -> Self {
+    pub fn new(
+        config: Config,
+        rt: Arc<Runtime>,
+        rx: Receiver<MessagePort<OpenOrder, Order>>,
+        state: Arc<RwLock<State>>,
+    ) -> Self {
         let wal = WriteAheadLog::new(&config.wal_location).expect("Expect wal to be initialized");
+        let market = Market::new();
 
         Self {
             rt,
-            wal,
+            rx,
             state,
-            market: Market::new(),
+            wal,
+            market,
         }
     }
 
-    pub fn restore_state(&mut self) {
+    pub fn run(mut self) {
+        let mut id = 0_u64;
+
+        self.restore_state();
+
+        info!("Matcher is listening for commands");
+        while let Some(message) = self.rt.block_on(self.rx.recv()) {
+            id += 1;
+
+            debug!("Processing {:?}", message.req);
+
+            let mut order = Order::open(
+                OrderId(id),
+                message.side,
+                message.order_type,
+                message.price,
+                message.quantity,
+            );
+            self.save_command(&order);
+            self.process(&mut order);
+
+            message.reply(order).unwrap();
+        }
+
+        info!("Matcher stopped listening for commands");
+    }
+
+    fn restore_state(&mut self) {
         let orders = self.wal.read_orders();
         for mut order in orders {
             self.process(&mut order);
         }
     }
 
-    pub fn save_command(&mut self, order: &Order) {
+    fn save_command(&mut self, order: &Order) {
         self.wal.append_order(order).expect("Order not stored");
     }
 
-    pub fn process(&mut self, order: &mut Order) {
+    fn process(&mut self, order: &mut Order) {
         let mut state = self.rt.block_on(self.state.write());
 
         let trades = self.market.push(order);

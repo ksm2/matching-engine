@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::config::Config;
+use crate::matcher::Matcher;
 use crate::model::State;
 
 mod api;
@@ -60,7 +61,10 @@ fn main() -> Result<()> {
     let handle = rt.spawn(api::api(config.clone(), context));
 
     // Run the matcher
-    matcher::matcher(config, rt.clone(), order_receiver, state);
+    let matcher = Matcher::new(config, rt.clone(), order_receiver, state);
+    matcher.run();
+
+    // Wait for API threads to finish
     rt.block_on(handle)?;
 
     info!("Matching engine stopped");
