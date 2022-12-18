@@ -3,16 +3,16 @@ use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::RwLock;
+use tokio::sync::watch::Sender;
 
 use crate::config::Config;
-use crate::model::{
-    Market, MessagePort, OpenOrder, Order, OrderId, OrderType, State, Trade, WriteAheadLog,
-};
+use crate::model::{Market, MessagePort, OpenOrder, Order, OrderBook, OrderId, OrderType, State, Trade, WriteAheadLog};
 
 #[derive(Debug)]
 pub struct Matcher {
     rt: Arc<Runtime>,
     rx: Receiver<MessagePort<OpenOrder, Order>>,
+    obx: Sender<OrderBook>,
     state: Arc<RwLock<State>>,
     wal: WriteAheadLog,
     market: Market,
@@ -23,6 +23,7 @@ impl Matcher {
         config: Config,
         rt: Arc<Runtime>,
         rx: Receiver<MessagePort<OpenOrder, Order>>,
+        obx: Sender<OrderBook>,
         state: Arc<RwLock<State>>,
     ) -> Self {
         let wal = WriteAheadLog::new(&config.wal_location).expect("Expect wal to be initialized");
@@ -31,6 +32,7 @@ impl Matcher {
         Self {
             rt,
             rx,
+            obx,
             state,
             wal,
             market,
@@ -56,7 +58,8 @@ impl Matcher {
                 message.quantity,
             );
             self.save_command(&order);
-            self.process(&mut order);
+            let ob = self.process(&mut order);
+            self.obx.send(ob).unwrap();
 
             message.reply(order).unwrap();
         }
@@ -75,7 +78,7 @@ impl Matcher {
         self.wal.append_order(order).expect("Order not stored");
     }
 
-    fn process(&mut self, order: &mut Order) {
+    fn process(&mut self, order: &mut Order) -> OrderBook {
         let mut state = self.rt.block_on(self.state.write());
 
         let trades = self.market.push(order);
@@ -95,5 +98,7 @@ impl Matcher {
                 .order_book
                 .place(order.side, order.price, order.unfilled());
         }
+
+        state.order_book.clone()
     }
 }

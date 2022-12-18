@@ -1,10 +1,12 @@
 use anyhow::Result;
+use futures::{stream, Stream};
 use hyper::Method;
 use prometheus::proto::MetricFamily;
 use prometheus::{HistogramOpts, HistogramVec, IntGauge, Registry};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::watch::Receiver;
 use tokio::sync::{RwLock, RwLockReadGuard};
 
 use super::buckets::netflix_buckets;
@@ -15,6 +17,7 @@ pub struct Context {
     registry: Registry,
     req_duration_histogram: HistogramVec,
     connection_gauge: IntGauge,
+    order_book_receiver: Receiver<OrderBook>,
     matcher: Sender<MessagePort<OpenOrder, Order>>,
     state: Arc<RwLock<State>>,
 }
@@ -22,6 +25,7 @@ pub struct Context {
 impl Context {
     pub fn new(
         registry: Registry,
+        order_book_receiver: Receiver<OrderBook>,
         matcher: Sender<MessagePort<OpenOrder, Order>>,
         state: Arc<RwLock<State>>,
     ) -> Result<Self> {
@@ -42,6 +46,7 @@ impl Context {
             registry,
             req_duration_histogram,
             connection_gauge,
+            order_book_receiver,
             matcher,
             state,
         })
@@ -50,6 +55,25 @@ impl Context {
     pub async fn read_order_book(&self) -> RwLockReadGuard<OrderBook> {
         let state = self.state.read().await;
         RwLockReadGuard::map(state, |s| &s.order_book)
+    }
+
+    pub fn subscribe_order_book(&self) -> impl Stream<Item = OrderBook> + Send + 'static {
+        stream::unfold(
+            (true, self.order_book_receiver.clone()),
+            |(first, mut receiver)| async move {
+                if first {
+                    let book = receiver.borrow().clone();
+                    return Some((book, (false, receiver)));
+                }
+
+                if receiver.changed().await.is_ok() {
+                    let book = receiver.borrow().clone();
+                    Some((book, (false, receiver)))
+                } else {
+                    None
+                }
+            },
+        )
     }
 
     pub async fn read_trades(&self) -> RwLockReadGuard<Vec<Trade>> {

@@ -51,17 +51,22 @@ fn main() -> Result<()> {
     // - State: Our data structure which holds the order book and trades
     // - RwLock: A lock which allows many parallel reads or one write at a time
     // - Arc: Allows different scopes to hold a reference to the lock
-    let state = Arc::new(RwLock::new(State::new()));
+    let initial_state = State::new();
+    let state = Arc::new(RwLock::new(initial_state.clone()));
 
     // Initialize the order command message channel
     let (order_sender, order_receiver) = tokio::sync::mpsc::channel(32);
 
+    // Initialize the order book watch channel
+    let (order_book_sender, order_book_receiver) =
+        tokio::sync::watch::channel(initial_state.order_book);
+
     // Spawn async API threads
-    let context = api::Context::new(registry, order_sender, state.clone())?;
+    let context = api::Context::new(registry, order_book_receiver, order_sender, state.clone())?;
     let handle = rt.spawn(api::api(config.clone(), context));
 
     // Run the matcher
-    let matcher = Matcher::new(config, rt.clone(), order_receiver, state);
+    let matcher = Matcher::new(config, rt.clone(), order_receiver, order_book_sender, state);
     matcher.run();
 
     // Wait for API threads to finish

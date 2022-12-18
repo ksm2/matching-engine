@@ -7,6 +7,7 @@ use std::convert::Infallible;
 use std::io::Write;
 use std::ops::Deref;
 
+use futures::StreamExt;
 use hyper::header::{ALLOW, CONTENT_TYPE};
 use hyper::http::HeaderValue;
 use hyper::server::conn::AddrStream;
@@ -92,6 +93,9 @@ async fn handle_routing(context: &Context, req: Request<Body>) -> HttpResult<Res
         (&Method::GET, "/") => handle_get_order_book(context).await,
         (_other_method, "/") => method_not_allowed(&[Method::GET]),
 
+        (&Method::GET, "/subscribe") => handle_subscribe_order_book(context).await,
+        (_other_method, "/subscribe") => method_not_allowed(&[Method::GET]),
+
         (&Method::GET, "/trades") => handle_get_trades(context).await,
         (_other_method, "/trades") => method_not_allowed(&[Method::GET]),
 
@@ -108,6 +112,17 @@ async fn handle_routing(context: &Context, req: Request<Body>) -> HttpResult<Res
 async fn handle_get_order_book(context: &Context) -> HttpResult<Response<Body>> {
     let order_book = context.read_order_book().await;
     let res = json_response(StatusCode::OK, &order_book.deref())?;
+    Ok(res)
+}
+
+async fn handle_subscribe_order_book(context: &Context) -> HttpResult<Response<Body>> {
+    let body = Body::wrap_stream(
+        context
+            .subscribe_order_book()
+            .map(|ob| serde_json::to_string(&ob).unwrap())
+            .map(Result::<_, Infallible>::Ok),
+    );
+    let res = Response::new(body);
     Ok(res)
 }
 
