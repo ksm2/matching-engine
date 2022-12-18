@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 
 use super::Side;
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrderBook {
     pub last: Option<Decimal>,
     pub best_bid: Option<Decimal>,
@@ -123,7 +123,7 @@ impl OrderBook {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PricePair {
     pub price: Decimal,
     pub quantity: Decimal,

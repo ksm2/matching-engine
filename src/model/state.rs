@@ -1,6 +1,6 @@
 use crate::model::{OrderBook, Trade};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct State {
     pub order_book: OrderBook,
     pub trades: Vec<Trade>,
