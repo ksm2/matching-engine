@@ -34,7 +34,7 @@ impl WriteAheadLog {
         let entry = serde_json::to_string(order)?;
 
         // Write on file
-        writeln!(self.file, "{}", entry)?;
+        writeln!(self.file, "{entry}")?;
         self.file.flush()?;
 
         Ok(())
