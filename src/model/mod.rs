@@ -9,6 +9,7 @@ pub use order_type::OrderType;
 pub use side::Side;
 pub use state::State;
 pub use trade::Trade;
+pub use user::User;
 pub use wal::WriteAheadLog;
 
 mod market;
@@ -19,6 +20,7 @@ mod order_type;
 mod side;
 mod state;
 mod trade;
+mod user;
 mod wal;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
