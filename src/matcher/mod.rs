@@ -2,11 +2,14 @@ use log::{debug, info};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::Receiver;
-use tokio::sync::RwLock;
 use tokio::sync::watch::Sender;
+use tokio::sync::RwLock;
 
 use crate::config::Config;
-use crate::model::{Market, MessagePort, OpenOrder, Order, OrderBook, OrderId, OrderType, State, Trade, WriteAheadLog};
+use crate::model::{
+    Market, MessagePort, OpenOrder, Order, OrderBook, OrderId, OrderType, State, Trade,
+    WriteAheadLog,
+};
 
 #[derive(Debug)]
 pub struct Matcher {
