@@ -1,6 +1,5 @@
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
 use std::ops::Add;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -77,26 +76,14 @@ impl Order {
         self.quantity - self.filled
     }
 
-    pub fn can_be_filled_by(&self, other: &Self) -> bool {
-        if self.side == other.side {
-            return false;
-        }
-
+    pub fn crosses(&self, other: Decimal) -> bool {
         if self.order_type == OrderType::Market {
-            return other.order_type != OrderType::Market;
-        }
-
-        self.crosses(other)
-    }
-
-    pub fn crosses(&self, other: &Self) -> bool {
-        if self.side == other.side {
-            return false;
+            return true;
         }
 
         match self.side {
-            Side::Buy => self.price >= other.price,
-            Side::Sell => self.price <= other.price,
+            Side::Buy => self.price >= other,
+            Side::Sell => self.price <= other,
         }
     }
 
@@ -120,164 +107,10 @@ impl Order {
     }
 }
 
-impl PartialOrd for Order {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.side != other.side {
-            return None;
-        }
-
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Order {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match self.price.cmp(&other.price) {
-            Ordering::Equal => self.created_at.cmp(&other.created_at),
-            ordering => match self.side {
-                Side::Buy => ordering,
-                // the reverse ordering is used to construct min heap for sell orders
-                Side::Sell => ordering.reverse(),
-            },
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use rust_decimal_macros::dec;
-    use std::{thread, time};
-
-    #[test]
-    fn should_not_order_two_different_orders() {
-        let o1 = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(12), dec!(500));
-        let o2 = Order::open(
-            OrderId(2),
-            Side::Sell,
-            OrderType::Limit,
-            dec!(11),
-            dec!(600),
-        );
-
-        assert_eq!(o1.partial_cmp(&o2), None);
-    }
-
-    #[test]
-    fn should_compare_two_bids() {
-        let o1 = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(12), dec!(500));
-        let o2 = Order::open(OrderId(2), Side::Buy, OrderType::Limit, dec!(11), dec!(600));
-
-        assert!(o1.gt(&o2));
-        assert!(o2.lt(&o1));
-    }
-
-    #[test]
-    fn should_compare_two_asks() {
-        let o1 = Order::open(
-            OrderId(1),
-            Side::Sell,
-            OrderType::Limit,
-            dec!(12),
-            dec!(500),
-        );
-        let o2 = Order::open(
-            OrderId(2),
-            Side::Sell,
-            OrderType::Limit,
-            dec!(11),
-            dec!(600),
-        );
-
-        assert!(o1.lt(&o2));
-        assert!(o2.gt(&o1));
-    }
-
-    #[test]
-    fn should_compare_two_asks_with_different_creation_time() {
-        let o1 = Order::open(
-            OrderId(1),
-            Side::Sell,
-            OrderType::Limit,
-            dec!(12),
-            dec!(600),
-        );
-        let one_ms = time::Duration::from_millis(1);
-        thread::sleep(one_ms);
-        let o2 = Order::open(
-            OrderId(2),
-            Side::Sell,
-            OrderType::Limit,
-            dec!(12),
-            dec!(600),
-        );
-
-        assert!(o1.lt(&o2));
-        assert!(o2.gt(&o1));
-    }
-
-    #[test]
-    fn should_fill_a_market_order_of_opposite_side() {
-        let id1 = OrderId(1);
-        let o1 = Order::open_market(id1, Side::Sell, dec!(600));
-        let id2 = id1 + 1;
-        let o2 = Order::open_limit(id2, Side::Buy, dec!(12), dec!(600));
-
-        assert!(o1.can_be_filled_by(&o2));
-    }
-
-    #[test]
-    fn should_not_fill_a_market_order_of_same_side() {
-        let id1 = OrderId(1);
-        let o1 = Order::open_market(id1, Side::Sell, dec!(600));
-        let id2 = id1 + 1;
-        let o2 = Order::open_limit(id2, Side::Sell, dec!(12), dec!(600));
-
-        assert!(!o1.can_be_filled_by(&o2));
-    }
-
-    #[test]
-    fn should_not_fill_a_market_order_against_another_market_order() {
-        let id1 = OrderId(1);
-        let o1 = Order::open_market(id1, Side::Sell, dec!(600));
-        let id2 = id1 + 1;
-        let o2 = Order::open_market(id2, Side::Buy, dec!(600));
-
-        assert!(!o1.can_be_filled_by(&o2));
-    }
-
-    #[test]
-    fn should_fill_a_limit_order_of_opposite_side() {
-        let id1 = OrderId(1);
-        let o1 = Order::open_limit(id1, Side::Sell, dec!(11), dec!(600));
-        let id2 = id1 + 1;
-        let o2 = Order::open_limit(id2, Side::Buy, dec!(12), dec!(600));
-
-        assert!(o1.can_be_filled_by(&o2));
-    }
-
-    #[test]
-    fn should_not_cross_order_of_same_side() {
-        let o1 = Order::open(OrderId(1), Side::Buy, OrderType::Limit, dec!(12), dec!(500));
-        let o2 = Order::open(OrderId(2), Side::Buy, OrderType::Limit, dec!(11), dec!(600));
-        let o3 = Order::open(
-            OrderId(3),
-            Side::Sell,
-            OrderType::Limit,
-            dec!(12),
-            dec!(500),
-        );
-        let o4 = Order::open(
-            OrderId(4),
-            Side::Sell,
-            OrderType::Limit,
-            dec!(11),
-            dec!(600),
-        );
-
-        assert!(!o1.crosses(&o2));
-        assert!(!o3.crosses(&o4));
-    }
 
     #[test]
     fn should_cross_a_bid_with_an_equal_ask() {
@@ -290,8 +123,8 @@ mod tests {
             dec!(500),
         );
 
-        assert!(o1.crosses(&o2));
-        assert!(o2.crosses(&o1));
+        assert!(o1.crosses(o2.price));
+        assert!(o2.crosses(o1.price));
     }
 
     #[test]
@@ -305,7 +138,7 @@ mod tests {
             dec!(500),
         );
 
-        assert!(o1.crosses(&o2));
+        assert!(o1.crosses(o2.price));
     }
 
     #[test]
@@ -319,7 +152,7 @@ mod tests {
         );
         let o2 = Order::open(OrderId(2), Side::Buy, OrderType::Limit, dec!(15), dec!(500));
 
-        assert!(o1.crosses(&o2));
+        assert!(o1.crosses(o2.price));
     }
 
     #[test]

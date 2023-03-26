@@ -1,18 +1,15 @@
-use crate::model::{Order, OrderType, Side, Trade};
-use log::debug;
-use std::collections::BinaryHeap;
-use std::ops::DerefMut;
+use crate::model::{Order, OrderBookSide, OrderType, Side, Trade};
 
 #[derive(Debug)]
 pub struct Market {
-    bids: BinaryHeap<Order>,
-    asks: BinaryHeap<Order>,
+    bids: OrderBookSide,
+    asks: OrderBookSide,
 }
 
 impl Market {
     pub fn new() -> Self {
-        let bids = BinaryHeap::new();
-        let asks = BinaryHeap::new();
+        let bids = OrderBookSide::new(true);
+        let asks = OrderBookSide::new(false);
         Self { bids, asks }
     }
 
@@ -25,55 +22,19 @@ impl Market {
     }
 
     fn fill_order(&mut self, order: &mut Order) -> Vec<Trade> {
-        let opposite_orders = match order.side {
-            Side::Buy => &mut self.asks,
-            Side::Sell => &mut self.bids,
-        };
-
-        let mut trades = Vec::new();
-
-        while !order.is_filled() {
-            let filled = {
-                let mut peek_other = match opposite_orders.peek_mut() {
-                    None => break,
-                    Some(o) => o,
-                };
-                let other = peek_other.deref_mut();
-
-                if !order.can_be_filled_by(other) {
-                    break;
-                }
-
-                let trade = Self::execute_trade(order, other);
-                trades.push(trade);
-                other.is_filled()
-            };
-
-            if filled {
-                opposite_orders.pop();
-            }
-        }
-
-        trades
-    }
-
-    fn execute_trade(order: &mut Order, other: &mut Order) -> Trade {
-        let (buy_order_id, sell_order_id) = match order.side {
-            Side::Buy => (order.id, other.id),
-            Side::Sell => (other.id, order.id),
-        };
-
-        let used_qty = other.fill(order.unfilled());
-        order.fill(used_qty);
-        debug!("Filled bid at {}", other.price);
-
-        Trade::new(other.price, used_qty, buy_order_id, sell_order_id)
+        let opposite_side = self.side_mut(!order.side);
+        opposite_side.fill(order)
     }
 
     fn push_order(&mut self, order: Order) {
-        match order.side {
-            Side::Buy => self.bids.push(order),
-            Side::Sell => self.asks.push(order),
+        let order_side = self.side_mut(order.side);
+        order_side.push(order);
+    }
+
+    fn side_mut(&mut self, side: Side) -> &mut OrderBookSide {
+        match side {
+            Side::Buy => &mut self.bids,
+            Side::Sell => &mut self.asks,
         }
     }
 }
